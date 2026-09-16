@@ -1,0 +1,2260 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FAE客服管理系統</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdn.sheetjs.com/xlsx-0.19.3/package/dist/xlsx.full.min.js"></script>
+    
+    <style>
+        body { font-family: 'Inter', sans-serif; background-color: #f8fafc; }
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+        ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+        
+        @keyframes slideIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+        @keyframes fadeOut { from { opacity: 1; } to { opacity: 0; } }
+        .toast-enter { animation: slideIn 0.3s ease-out forwards; }
+        .toast-exit { animation: fadeOut 0.3s ease-out forwards; }
+
+        @keyframes flashRed {
+            0% { background-color: rgba(239, 68, 68, 0.1); }
+            100% { background-color: rgba(239, 68, 68, 0.6); }
+        }
+        .bg-flash-danger { animation: flashRed 1s infinite alternate; }
+    </style>
+</head>
+<body class="text-slate-800 h-screen flex flex-col overflow-hidden">
+
+    <header class="bg-indigo-600 text-white shadow-md z-10 shrink-0">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3 flex justify-between items-center">
+            <div class="flex items-center gap-3">
+                <i class="fa-solid fa-server text-2xl"></i>
+                <h1 class="text-xl font-bold tracking-wide">FAE客服管理系統</h1>
+            </div>
+            
+            <div class="flex items-center gap-4">
+                <!-- 全域系統資料備份/還原 -->
+                <div class="hidden md:flex items-center gap-2 border-r border-indigo-400 pr-4">
+                    <label class="cursor-pointer bg-indigo-700/50 hover:bg-indigo-500 text-white text-xs px-3 py-1.5 rounded border border-indigo-500 transition-colors flex items-center gap-1 shadow-sm" title="匯入完整系統資料 (JSON)">
+                        <i class="fa-solid fa-cloud-arrow-up"></i> 匯入資料
+                        <input type="file" accept=".json" class="hidden" onchange="window.importSystemData(event)">
+                    </label>
+                    <button onclick="window.exportSystemData()" class="bg-indigo-700/50 hover:bg-indigo-500 text-white text-xs px-3 py-1.5 rounded border border-indigo-500 transition-colors flex items-center gap-1 shadow-sm" title="匯出完整系統資料 (JSON)">
+                        <i class="fa-solid fa-cloud-arrow-down"></i> 備份資料
+                    </button>
+                </div>
+
+                <div class="flex items-center bg-indigo-700/50 rounded-lg p-1 border border-indigo-500 shadow-inner">
+                    <i class="fa-solid fa-key text-indigo-300 ml-2 text-sm"></i>
+                    <input type="password" id="apiKeyInput" placeholder="輸入 API Key..." class="bg-transparent border-none focus:ring-0 text-sm text-white placeholder-indigo-300 w-32 py-1 px-2 outline-none">
+                    <button id="saveApiKeyBtn" onclick="window.toggleApiKey()" class="bg-indigo-500 hover:bg-indigo-400 text-white text-xs px-2 py-1 rounded transition-colors shadow-sm font-medium">儲存</button>
+                    <a href="https://aistudio.google.com/app/apikey" target="_blank" class="ml-1 text-indigo-300 hover:text-white text-xs px-2 py-1 transition-colors" title="申請 API Key"><i class="fa-solid fa-link"></i></a>
+                </div>
+                <div class="text-sm bg-indigo-500/50 px-3 py-1.5 rounded-full border border-indigo-400">
+                    <i class="fa-regular fa-clock mr-1"></i> <span id="currentDateDisplay">載入中...</span>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <main class="flex-1 overflow-hidden">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-full py-6">
+            <div class="flex flex-col lg:flex-row gap-6 h-full">
+                
+                <div class="w-full lg:w-1/3 bg-white rounded-xl shadow-sm border border-slate-200 flex flex-col overflow-hidden shrink-0">
+                    <div class="px-5 py-4 border-b border-slate-200 bg-slate-50 flex justify-between items-center">
+                        <h2 id="formTitle" class="font-semibold text-slate-700"><i class="fa-solid fa-pen-to-square mr-2"></i>新增回報紀錄</h2>
+                    </div>
+                    
+                    <div class="p-5 overflow-y-auto flex-1">
+                        <form id="issueForm" class="space-y-4">
+                            <div class="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label class="block text-xs font-medium text-slate-500 mb-1">發生時間 <span class="text-red-500">*</span></label>
+                                    <input type="datetime-local" id="f_time" required class="w-full rounded-md border-slate-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm p-2 border">
+                                </div>
+                                <div>
+                                    <label class="block text-xs font-medium text-slate-500 mb-1">公司／客戶 <span class="text-red-500">*</span></label>
+                                    <input type="text" id="f_company" required placeholder="例: XXX 公司" class="w-full rounded-md border-slate-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm p-2 border">
+                                </div>
+                            </div>
+                            
+                            <!-- 新增：工作內容欄位 -->
+                            <div>
+                                <label class="block text-xs font-medium text-slate-500 mb-1">工作內容 <span class="text-red-500">*</span></label>
+                                <textarea id="f_task_content" required rows="2" placeholder="請簡述本次主要工作內容" class="w-full rounded-md border-slate-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm p-2 border"></textarea>
+                            </div>
+
+                            <!-- 智慧問題描述選單 -->
+                            <div>
+                                <label class="block text-xs font-medium text-slate-500 mb-1">問題描述 <span class="text-red-500">*</span></label>
+                                <input type="text" id="f_desc" list="descOptions" required placeholder="請選擇或自行填入問題描述" class="w-full rounded-md border-slate-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm p-2 border bg-white">
+                                <datalist id="descOptions">
+                                    <option value="新訂單"></option>
+                                    <option value="舊客戶新增設備"></option>
+                                    <option value="報修ISSU"></option>
+                                </datalist>
+                            </div>
+                            
+                            <div>
+                                <label class="block text-xs font-medium text-slate-500 mb-1">影響範圍 <span class="text-red-500">*</span></label>
+                                <input type="text" id="f_impact" required placeholder="例: 單一站點／登入受阻" class="w-full rounded-md border-slate-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm p-2 border">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-medium text-slate-500 mb-1">原因 <span class="text-red-500">*</span></label>
+                                <textarea id="f_cause" required rows="2" placeholder="若未知可寫「待確認」並簡述方向" class="w-full rounded-md border-slate-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm p-2 border"></textarea>
+                            </div>
+                            <div>
+                                <label class="block text-xs font-medium text-slate-500 mb-1">目前處理人員 <span class="text-red-500">*</span></label>
+                                <select id="f_handler" class="w-full rounded-md border-slate-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm p-2 border bg-white">
+                                    <option value="待指定" selected>待指定</option>
+                                    <option value="FAE">FAE</option>
+                                    <option value="RD">RD</option>
+                                    <option value="CPM">CPM</option>
+                                    <option value="業務">業務</option>
+                                </select>
+                            </div>
+                            <div class="bg-indigo-50/50 p-3 rounded-lg border border-indigo-100">
+                                <label class="block text-xs font-medium text-slate-700 mb-2">當下處置方式 <span class="text-red-500">*</span></label>
+                                <select id="f_action_type" class="w-full mb-2 rounded-md border-slate-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm p-2 border bg-white">
+                                    <option value="A">(A) 可行 Workaround</option>
+                                    <option value="B">(B) 需建 TK 追蹤 (無法立即處理)</option>
+                                    <option value="C">(C) 系統限制／待進階評估</option>
+                                </select>
+                                <textarea id="f_action_desc" required rows="2" placeholder="請清楚寫明步驟、TK編號或原因" class="w-full rounded-md border-slate-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm p-2 border"></textarea>
+                            </div>
+                            
+                            <!-- 新增：目前進度欄位 -->
+                            <div>
+                                <label class="block text-xs font-medium text-slate-500 mb-1">目前進度</label>
+                                <textarea id="f_progress" rows="2" placeholder="例: 已派工待處理 / 零件調撥中..." class="w-full rounded-md border-slate-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm p-2 border"></textarea>
+                            </div>
+
+                            <div>
+                                <label class="block text-xs font-medium text-slate-500 mb-1">後續改善方向</label>
+                                <textarea id="f_improvement" rows="2" placeholder="例: 調整程式碼／加監控告警" class="w-full rounded-md border-slate-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm p-2 border"></textarea>
+                            </div>
+
+                            <!-- 附件上傳區塊 (拖曳 UI) -->
+                            <div>
+                                <label class="block text-xs font-medium text-slate-500 mb-1">附加檔案 (Log/截圖/文件)</label>
+                                <div class="mt-1 flex justify-center px-6 pt-5 pb-5 border-2 border-slate-300 border-dashed rounded-md hover:bg-slate-50 transition-colors cursor-pointer" id="dropZone" onclick="document.getElementById('f_file').click()">
+                                    <div class="space-y-1 text-center pointer-events-none">
+                                        <i class="fa-solid fa-cloud-arrow-up text-4xl text-slate-400 mb-2"></i>
+                                        <div class="flex text-sm justify-center font-medium">
+                                            <span class="text-indigo-600">選擇檔案</span>
+                                            <span class="text-slate-600 pl-1">或拖曳至此</span>
+                                        </div>
+                                        <p class="text-xs text-slate-500 pt-1" id="fileListDisplay">尚未選擇檔案</p>
+                                    </div>
+                                    <input id="f_file" type="file" class="hidden" multiple onchange="window.handleFiles(this.files)">
+                                </div>
+                                <div id="dirWarning" class="hidden mt-2 text-xs text-amber-600 bg-amber-50 p-2 rounded border border-amber-200">
+                                    <i class="fa-solid fa-triangle-exclamation"></i> 尚未設定儲存根目錄，檔案不會自動存檔至本機資料夾。請於右側清單上方設定。
+                                </div>
+                                <div id="fileListContainer" class="mt-2 space-y-2 empty:hidden"></div>
+                            </div>
+                            
+                            <div>
+                                <label class="block text-xs font-medium text-slate-500 mb-1">補充 (路徑/指令)</label>
+                                <input type="text" id="f_notes" class="w-full rounded-md border-slate-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm p-2 border">
+                            </div>
+                            
+                            <!-- 擴充版狀態列 -->
+                            <div>
+                                <label class="block text-xs font-medium text-slate-500 mb-1">目前狀態</label>
+                                <div class="flex flex-wrap gap-x-4 gap-y-2">
+                                    <label class="flex items-center text-sm cursor-pointer"><input type="radio" name="f_status" value="未處理" checked class="mr-1 text-red-600 focus:ring-red-500"> <span class="text-slate-700">未處理</span></label>
+                                    <label class="flex items-center text-sm cursor-pointer"><input type="radio" name="f_status" value="處理中" class="mr-1 text-yellow-600 focus:ring-yellow-500"> <span class="text-slate-700">處理中</span></label>
+                                    <label class="flex items-center text-sm cursor-pointer"><input type="radio" name="f_status" value="待後續處理" class="mr-1 text-purple-600 focus:ring-purple-500"> <span class="text-slate-700">待後續處理</span></label>
+                                    <label class="flex items-center text-sm cursor-pointer"><input type="radio" name="f_status" value="已完成" class="mr-1 text-green-600 focus:ring-green-500"> <span class="text-slate-700">已完成</span></label>
+                                    <label class="flex items-center text-sm cursor-pointer"><input type="radio" name="f_status" value="新訂單客戶未設定" class="mr-1 text-cyan-600 focus:ring-cyan-500"> <span class="text-slate-700">新訂單未設定</span></label>
+                                    <label class="flex items-center text-sm cursor-pointer"><input type="radio" name="f_status" value="新訂單客戶設定中" class="mr-1 text-blue-600 focus:ring-blue-500"> <span class="text-slate-700">新訂單設定中</span></label>
+                                    <label class="flex items-center text-sm cursor-pointer"><input type="radio" name="f_status" value="RD回報ISUU紀錄" class="mr-1 text-orange-600 focus:ring-orange-500"> <span class="text-slate-700">RD回報ISUU紀錄</span></label>
+                                </div>
+                            </div>
+
+                            <!-- 新增：狀態變更原因欄位 -->
+                            <div>
+                                <label class="block text-xs font-medium text-slate-500 mb-1">狀態變更原因 (選填)</label>
+                                <input type="text" id="f_status_reason" placeholder="說明變更此狀態的原因..." class="w-full rounded-md border-slate-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm p-2 border bg-white">
+                            </div>
+
+                            <!-- 單筆紀錄追蹤鬧鐘 -->
+                            <div class="border border-indigo-100 rounded-lg overflow-hidden bg-white shadow-sm mt-2">
+                                <div class="bg-indigo-50 px-4 py-2 flex items-center justify-between cursor-pointer" onclick="document.getElementById('f_remind_toggle').click()">
+                                    <span class="text-sm font-bold text-indigo-900 flex items-center gap-2"><i class="fa-solid fa-clock text-indigo-500"></i> 本紀錄後續追蹤提醒</span>
+                                    <div onclick="event.stopPropagation()">
+                                        <label class="relative inline-flex items-center cursor-pointer">
+                                            <input type="checkbox" id="f_remind_toggle" class="sr-only peer" onchange="window.toggleReportReminderFields(this.checked)">
+                                            <div class="w-9 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-indigo-600"></div>
+                                        </label>
+                                    </div>
+                                </div>
+                                <div id="f_reminderFields" class="p-4 space-y-3 hidden">
+                                    <div class="grid grid-cols-2 gap-3">
+                                        <div>
+                                            <label class="block text-xs font-medium text-slate-600 mb-1">追蹤日期與時間</label>
+                                            <input type="datetime-local" id="f_appoint_time" class="w-full rounded-md border-slate-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm p-2 border">
+                                        </div>
+                                        <div>
+                                            <label class="block text-xs font-medium text-slate-600 mb-1">提醒時機</label>
+                                            <select id="f_remind_offset" class="w-full rounded-md border-slate-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm p-2 border bg-white" onchange="window.toggleReportCustomTime(this.value)">
+                                                <option value="0">準時提醒</option>
+                                                <option value="5">前 5 分鐘</option>
+                                                <option value="15">前 15 分鐘</option>
+                                                <option value="custom">自訂時間</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                    <div id="f_customTimeField" class="hidden">
+                                        <label class="block text-xs font-medium text-slate-600 mb-1">自訂提醒時間</label>
+                                        <input type="datetime-local" id="f_custom_time" class="w-full rounded-md border-slate-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm p-2 border">
+                                    </div>
+                                    <div class="grid grid-cols-2 gap-3">
+                                        <div class="col-span-2 sm:col-span-1">
+                                            <label class="block text-xs font-medium text-slate-600 mb-1">提醒內容</label>
+                                            <input type="text" id="f_remind_msg" placeholder="預設顯示：本紀錄的問題描述" class="w-full rounded-md border-slate-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm p-2 border">
+                                        </div>
+                                        <div class="col-span-2 sm:col-span-1">
+                                            <label class="block text-xs font-medium text-slate-600 mb-1">提醒聲效</label>
+                                            <select id="f_remind_sound" class="w-full rounded-md border-slate-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm p-2 border bg-white">
+                                                <option value="beep">嗶嗶聲 (Beep)</option>
+                                                <option value="chime">鐘聲 (Chime)</option>
+                                                <option value="siren">警報聲 (Siren)</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="flex gap-3 mt-4">
+                                <button type="button" id="cancelEditBtn" onclick="window.cancelEdit()" class="hidden flex-1 bg-white hover:bg-slate-50 text-slate-700 font-medium py-2.5 px-4 rounded-md shadow-sm transition-colors flex justify-center items-center gap-2 border border-slate-300">
+                                    <i class="fa-solid fa-xmark"></i> 取消修改
+                                </button>
+                                <button type="submit" id="submitBtn" class="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-2.5 px-4 rounded-md shadow-sm transition-colors flex justify-center items-center gap-2">
+                                    <i class="fa-solid fa-plus"></i> 新增紀錄
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+
+                <div class="w-full lg:w-2/3 bg-white rounded-xl shadow-sm border border-slate-200 flex flex-col overflow-hidden shrink-0">
+                    <div class="px-5 py-4 border-b border-slate-200 bg-slate-50 flex flex-col 2xl:flex-row justify-between items-start 2xl:items-center gap-3">
+                        <h2 class="font-semibold text-slate-700 shrink-0"><i class="fa-solid fa-list-check mr-2"></i>異常紀錄清單</h2>
+                        
+                        <div class="flex flex-wrap gap-2 w-full 2xl:w-auto items-center justify-start 2xl:justify-end">
+                            
+                            <!-- 全域系統資料備份/還原 -->
+                            <div class="flex items-center gap-1 border-r border-slate-300 pr-2 mr-1">
+                                <label class="cursor-pointer bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs px-2.5 py-1.5 rounded border border-slate-300 transition-colors flex items-center gap-1 shadow-sm" title="匯入完整系統資料 (JSON)">
+                                    <i class="fa-solid fa-cloud-arrow-up text-indigo-500"></i> 匯入
+                                    <input type="file" accept=".json" class="hidden" onchange="window.importSystemData(event)">
+                                </label>
+                                <button onclick="window.exportSystemData()" class="bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs px-2.5 py-1.5 rounded border border-slate-300 transition-colors flex items-center gap-1 shadow-sm" title="匯出完整系統資料 (JSON)">
+                                    <i class="fa-solid fa-cloud-arrow-down text-indigo-500"></i> 備份
+                                </button>
+                            </div>
+
+                            <button onclick="window.openClientManager()" class="bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium h-[34px] px-3 rounded-md shadow-sm transition-colors flex items-center gap-2 shrink-0">
+                                <i class="fa-solid fa-address-book"></i> 管理名單
+                            </button>
+
+                            <div class="flex items-center bg-slate-100 rounded-md p-1 border border-slate-200 h-[34px] shrink-0">
+                                <button onclick="window.setTimeViewMode('all')" id="btnViewAll" class="view-mode-btn px-2.5 h-full text-xs font-medium rounded text-slate-500 hover:text-slate-800 transition-colors">全部</button>
+                                <button onclick="window.setTimeViewMode('month')" id="btnViewMonth" class="view-mode-btn px-2.5 h-full text-xs font-medium rounded bg-white text-indigo-600 shadow-sm transition-colors">月</button>
+                                <button onclick="window.setTimeViewMode('week')" id="btnViewWeek" class="view-mode-btn px-2.5 h-full text-xs font-medium rounded text-slate-500 hover:text-slate-800 transition-colors">週</button>
+                            </div>
+
+                            <div id="monthFilterContainer" class="flex items-center bg-white border border-slate-300 rounded-md shadow-sm px-2 h-[34px]">
+                                <i class="fa-regular fa-calendar text-slate-400 mr-2 text-sm"></i>
+                                <select id="monthFilter" class="bg-transparent border-none focus:ring-0 text-sm py-1 pl-0 pr-6 text-slate-700 cursor-pointer h-full outline-none"></select>
+                            </div>
+
+                            <!-- 報表匯出與存檔工具群 (乾淨整合版) -->
+                            <div class="flex items-center gap-1 shrink-0">
+                                <button type="button" id="setAttachmentDirBtn" onclick="window.handleSetAttachmentRootDir()" class="bg-amber-500 hover:bg-amber-600 text-white text-sm font-medium h-[34px] px-3 rounded-md shadow-sm transition-colors flex items-center gap-2" title="設定/修改附件自動存檔資料夾">
+                                    <i class="fa-solid fa-folder-open"></i> 附件根目錄
+                                </button>
+
+                                <button type="button" id="setSaveDirBtn" class="bg-amber-500 hover:bg-amber-600 text-white text-sm font-medium h-[34px] px-3 rounded-md shadow-sm transition-colors flex items-center gap-2" title="設定/修改報表自動存檔資料夾">
+                                    <i class="fa-solid fa-folder-open"></i> 報表存檔路徑
+                                </button>
+                                
+                                <button id="smartExportBtn" class="bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-medium h-[34px] px-3 rounded-md shadow-sm transition-colors flex items-center gap-1" title="匯出報表 (自動記憶路徑)">
+                                    <i class="fa-solid fa-file-excel"></i> 匯出報表
+                                </button>
+                            </div>
+
+                        </div>
+                    </div>
+                    
+                    <div class="bg-slate-50/80 border-b border-slate-200 px-4 py-3 flex items-center justify-between shadow-inner">
+                        <button onclick="window.changeWeek(-1)" class="w-8 h-8 flex items-center justify-center rounded-full bg-white border border-slate-200 shadow-sm hover:bg-slate-100 text-slate-500 transition-colors shrink-0"><i class="fa-solid fa-chevron-left"></i></button>
+                        <div id="calendarDays" class="flex flex-1 justify-center gap-2 sm:gap-4 px-2 overflow-hidden"></div>
+                        <button onclick="window.changeWeek(1)" class="w-8 h-8 flex items-center justify-center rounded-full bg-white border border-slate-200 shadow-sm hover:bg-slate-100 text-slate-500 transition-colors shrink-0"><i class="fa-solid fa-chevron-right"></i></button>
+                        <div class="ml-3 pl-3 border-l border-slate-300 shrink-0">
+                            <button onclick="window.resetToToday()" class="text-xs font-medium text-indigo-700 hover:text-indigo-900 bg-indigo-50 hover:bg-indigo-100 border border-indigo-100 px-2.5 py-1.5 rounded-md transition-colors shadow-sm"><i class="fa-solid fa-calendar-day mr-1"></i> 今日</button>
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-7 divide-x divide-y sm:divide-y-0 divide-slate-100 bg-slate-50/50 border-b border-slate-100">
+                        <div class="px-2 py-3 text-center cursor-pointer hover:bg-slate-100 transition-colors" onclick="window.setStatusFilter('未處理')">
+                            <div class="text-xs text-slate-500 mb-1">未處理</div><div id="stat-todo" class="text-lg font-bold text-red-600">0</div>
+                        </div>
+                        <div class="px-2 py-3 text-center cursor-pointer hover:bg-slate-100 transition-colors" onclick="window.setStatusFilter('處理中')">
+                            <div class="text-xs text-slate-500 mb-1">處理中</div><div id="stat-doing" class="text-lg font-bold text-yellow-600">0</div>
+                        </div>
+                        <div class="px-2 py-3 text-center cursor-pointer hover:bg-slate-100 transition-colors" onclick="window.setStatusFilter('待後續處理')">
+                            <div class="text-xs text-slate-500 mb-1">待後續處理</div><div id="stat-pending" class="text-lg font-bold text-purple-600">0</div>
+                        </div>
+                        <div class="px-2 py-3 text-center cursor-pointer hover:bg-slate-100 transition-colors" onclick="window.setStatusFilter('已完成')">
+                            <div class="text-xs text-slate-500 mb-1">已完成</div><div id="stat-done" class="text-lg font-bold text-green-600">0</div>
+                        </div>
+                        <div class="px-2 py-3 text-center cursor-pointer hover:bg-slate-100 transition-colors" onclick="window.setStatusFilter('新訂單客戶未設定')">
+                            <div class="text-xs text-slate-500 mb-1">未設定</div><div id="stat-new-unset" class="text-lg font-bold text-cyan-600">0</div>
+                        </div>
+                        <div class="px-2 py-3 text-center cursor-pointer hover:bg-slate-100 transition-colors" onclick="window.setStatusFilter('新訂單客戶設定中')">
+                            <div class="text-xs text-slate-500 mb-1">設定中</div><div id="stat-new-setting" class="text-lg font-bold text-blue-600">0</div>
+                        </div>
+                        <div class="px-2 py-3 text-center cursor-pointer hover:bg-slate-100 transition-colors" onclick="window.setStatusFilter('RD回報ISUU紀錄')">
+                            <div class="text-xs text-slate-500 mb-1">RD回報ISUU</div><div id="stat-rd-issue" class="text-lg font-bold text-orange-600">0</div>
+                        </div>
+                    </div>
+
+                    <div class="px-4 py-2.5 bg-white border-b border-slate-200 flex gap-2 text-sm overflow-x-auto shadow-sm z-10" id="statusTabs">
+                        <button class="status-tab active px-4 py-1.5 rounded-full bg-slate-800 text-white font-medium transition-colors whitespace-nowrap" data-status="全部" onclick="window.setStatusFilter('全部')">全部紀錄</button>
+                        <button class="status-tab px-4 py-1.5 rounded-full bg-slate-100 text-slate-600 hover:bg-slate-200 font-medium transition-colors whitespace-nowrap" data-status="未處理" onclick="window.setStatusFilter('未處理')">未處理清單</button>
+                        <button class="status-tab px-4 py-1.5 rounded-full bg-slate-100 text-slate-600 hover:bg-slate-200 font-medium transition-colors whitespace-nowrap" data-status="處理中" onclick="window.setStatusFilter('處理中')">處理中清單</button>
+                        <button class="status-tab px-4 py-1.5 rounded-full bg-slate-100 text-slate-600 hover:bg-slate-200 font-medium transition-colors whitespace-nowrap" data-status="待後續處理" onclick="window.setStatusFilter('待後續處理')">待後續處理</button>
+                        <button class="status-tab px-4 py-1.5 rounded-full bg-slate-100 text-slate-600 hover:bg-slate-200 font-medium transition-colors whitespace-nowrap" data-status="已完成" onclick="window.setStatusFilter('已完成')">已完成清單</button>
+                        <button class="status-tab px-4 py-1.5 rounded-full bg-slate-100 text-slate-600 hover:bg-slate-200 font-medium transition-colors whitespace-nowrap" data-status="新訂單客戶未設定" onclick="window.setStatusFilter('新訂單客戶未設定')">新訂單未設定</button>
+                        <button class="status-tab px-4 py-1.5 rounded-full bg-slate-100 text-slate-600 hover:bg-slate-200 font-medium transition-colors whitespace-nowrap" data-status="新訂單客戶設定中" onclick="window.setStatusFilter('新訂單客戶設定中')">新訂單設定中</button>
+                        <button class="status-tab px-4 py-1.5 rounded-full bg-slate-100 text-slate-600 hover:bg-slate-200 font-medium transition-colors whitespace-nowrap" data-status="RD回報ISUU紀錄" onclick="window.setStatusFilter('RD回報ISUU紀錄')">RD回報ISUU紀錄</button>
+                    </div>
+
+                    <div id="listContainer" class="p-4 overflow-y-auto flex-1 space-y-3 bg-slate-50/50"></div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- 管理名單 Modal -->
+    <div id="clientManagerModal" class="fixed inset-0 bg-slate-900/60 hidden z-50 flex items-center justify-center backdrop-blur-sm">
+        <div class="bg-white rounded-xl shadow-2xl w-full max-w-6xl max-h-[90vh] flex flex-col mx-4 overflow-hidden transform transition-all">
+            <div class="px-6 py-4 border-b border-slate-200 bg-slate-50 flex justify-between items-center shrink-0">
+                <div class="flex items-center gap-4">
+                    <h2 class="text-xl font-bold text-slate-800"><i class="fa-solid fa-address-book text-blue-600 mr-2"></i> 客戶資產與狀態管理</h2>
+                    <div class="relative flex items-center">
+                        <i class="fa-solid fa-magnifying-glass absolute left-3 text-slate-400"></i>
+                        <input type="text" id="clientSearchInput" placeholder="搜尋公司名稱..." onkeyup="window.renderClientList()" class="pl-9 pr-4 py-1.5 text-sm border border-slate-300 rounded-full focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none w-64 shadow-sm transition-all">
+                    </div>
+                </div>
+                <div class="flex items-center gap-2">
+                    <button onclick="window.openClientEditModal()" class="bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1.5 rounded-md text-sm font-medium shadow-sm transition-colors"><i class="fa-solid fa-plus mr-1"></i> 新增客戶</button>
+                    <div class="h-6 w-px bg-slate-300 mx-1"></div>
+                    <label class="bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 rounded-md text-sm font-medium shadow-sm transition-colors cursor-pointer flex items-center gap-1">
+                        <i class="fa-solid fa-file-import"></i> 匯入 Excel
+                        <input type="file" id="clientImportFile" accept=".xlsx, .xls, .csv" class="hidden" onchange="window.handleImportClients(event)">
+                    </label>
+                    <button onclick="window.handleExportClients()" class="bg-slate-700 hover:bg-slate-800 text-white px-3 py-1.5 rounded-md text-sm font-medium shadow-sm transition-colors"><i class="fa-solid fa-file-export mr-1"></i> 匯出 Excel</button>
+                    <button onclick="window.closeClientManager()" class="ml-2 text-slate-400 hover:text-slate-600 w-8 h-8 flex items-center justify-center rounded-full hover:bg-slate-200 transition-colors"><i class="fa-solid fa-xmark text-lg"></i></button>
+                </div>
+            </div>
+            <div class="flex-1 overflow-auto p-6 bg-slate-50/50">
+                <table class="w-full text-left text-sm whitespace-nowrap">
+                    <thead class="bg-slate-200/70 text-slate-600 sticky top-0 z-10 shadow-sm">
+                        <tr>
+                            <th class="py-3 px-4 font-semibold rounded-tl-lg">公司/客戶名稱</th>
+                            <th class="py-3 px-4 font-semibold">業務人員</th>
+                            <th class="py-3 px-4 font-semibold">來源</th>
+                            <th class="py-3 px-4 font-semibold">驗收/進場</th>
+                            <th class="py-3 px-4 font-semibold border-l border-slate-300">硬體到期</th>
+                            <th class="py-3 px-4 font-semibold">硬體狀態</th>
+                            <th class="py-3 px-4 font-semibold border-l border-slate-300">軟體到期</th>
+                            <th class="py-3 px-4 font-semibold">軟體狀態</th>
+                            <th class="py-3 px-4 font-semibold text-center">提醒</th>
+                            <th class="py-3 px-4 font-semibold text-center rounded-tr-lg">操作</th>
+                        </tr>
+                    </thead>
+                    <tbody id="clientTableBody" class="divide-y divide-slate-200 bg-white shadow-sm rounded-b-lg"></tbody>
+                </table>
+                <div id="clientEmptyState" class="hidden text-center py-10 text-slate-400 bg-white border border-t-0 border-slate-200 rounded-b-lg">
+                    <i class="fa-regular fa-folder-open text-4xl mb-2"></i>
+                    <p>找不到符合條件的客戶資料</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 新增/修改單一客戶 Modal -->
+    <div id="clientEditModal" class="fixed inset-0 bg-slate-900/60 hidden z-[60] flex items-center justify-center backdrop-blur-sm">
+        <div class="bg-white rounded-xl shadow-2xl w-full max-w-lg overflow-hidden transform transition-all">
+            <div class="px-5 py-3 border-b border-slate-200 bg-indigo-50 flex justify-between items-center">
+                <h3 id="clientModalTitle" class="text-lg font-bold text-indigo-900">新增客戶資料</h3>
+                <button onclick="window.closeClientEditModal()" class="text-slate-400 hover:text-slate-600 transition-colors"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div class="p-5 overflow-y-auto max-h-[75vh]">
+                <form id="clientForm" class="space-y-3" onsubmit="window.saveClient(event)">
+                    <div>
+                        <label class="block text-xs font-medium text-slate-600 mb-1">公司名稱 <span class="text-red-500">*</span></label>
+                        <input type="text" id="c_company" required class="w-full rounded-md border-slate-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm p-2 border">
+                    </div>
+                    <div class="grid grid-cols-2 gap-3">
+                        <div>
+                            <label class="block text-xs font-medium text-slate-600 mb-1">業務人員</label>
+                            <input type="text" id="c_sales" class="w-full rounded-md border-slate-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm p-2 border">
+                        </div>
+                        <div>
+                            <!-- 來源智慧選單 -->
+                            <label class="block text-xs font-medium text-slate-600 mb-1">來源</label>
+                            <input type="text" list="sourceOptions" id="c_source" placeholder="請選擇或輸入" class="w-full rounded-md border-slate-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm p-2 border bg-white">
+                            <datalist id="sourceOptions">
+                                <option value="E-Mail"></option>
+                                <option value="Line_公司號"></option>
+                                <option value="Line_私人號"></option>
+                                <option value="Line_系統維運"></option>
+                                <option value="Line_工程"></option>
+                                <option value="Line_業務"></option>
+                                <option value="Discord"></option>
+                                <option value="Slack"></option>
+                            </datalist>
+                        </div>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-medium text-slate-600 mb-1">驗收/進場日期</label>
+                        <input type="date" id="c_entry_date" class="w-full rounded-md border-slate-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm p-2 border">
+                    </div>
+                    
+                    <div class="grid grid-cols-2 gap-3 border-t border-slate-100 pt-3">
+                        <div>
+                            <label class="block text-xs font-medium text-slate-600 mb-1"><i class="fa-solid fa-server text-slate-400"></i> 硬體保固到期</label>
+                            <input type="date" id="c_hw_expiry" class="w-full rounded-md border-slate-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm p-2 border">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-medium text-slate-600 mb-1">硬體狀態</label>
+                            <input type="text" id="c_hw_status" list="statusOptions" placeholder="未過保/已過保..." class="w-full rounded-md border-slate-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm p-2 border bg-white">
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-2 gap-3 border-t border-slate-100 pt-3">
+                        <div>
+                            <label class="block text-xs font-medium text-slate-600 mb-1"><i class="fa-solid fa-code text-slate-400"></i> 軟體維運到期</label>
+                            <input type="date" id="c_sw_expiry" class="w-full rounded-md border-slate-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm p-2 border">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-medium text-slate-600 mb-1">軟體狀態</label>
+                            <input type="text" id="c_sw_status" list="statusOptions" placeholder="未到期/已到期..." class="w-full rounded-md border-slate-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm p-2 border bg-white">
+                        </div>
+                    </div>
+                    
+                    <datalist id="statusOptions">
+                        <option value="未過保"></option>
+                        <option value="已過保"></option>
+                        <option value="未到期"></option>
+                        <option value="已到期"></option>
+                        <option value="當天最後一天"></option>
+                        <option value="正常"></option>
+                        <option value="異常"></option>
+                    </datalist>
+
+                    <!-- 客戶約訪提醒區塊 (阻斷點擊衝突) -->
+                    <div class="mt-4 border border-indigo-100 rounded-lg overflow-hidden bg-white shadow-sm">
+                        <div class="bg-indigo-50 px-4 py-2 flex items-center justify-between cursor-pointer" onclick="document.getElementById('c_remind_toggle').click()">
+                            <span class="text-sm font-bold text-indigo-900 flex items-center gap-2"><i class="fa-solid fa-clock text-indigo-500"></i> 客戶約訪提醒</span>
+                            <div onclick="event.stopPropagation()">
+                                <label class="relative inline-flex items-center cursor-pointer">
+                                    <input type="checkbox" id="c_remind_toggle" class="sr-only peer" onchange="window.toggleReminderFields(this.checked)">
+                                    <div class="w-9 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-indigo-600"></div>
+                                </label>
+                            </div>
+                        </div>
+                        <div id="reminderFields" class="p-4 space-y-3 hidden">
+                            <div class="grid grid-cols-2 gap-3">
+                                <div>
+                                    <label class="block text-xs font-medium text-slate-600 mb-1">約訪日期與時間</label>
+                                    <input type="datetime-local" id="c_appoint_time" class="w-full rounded-md border-slate-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm p-2 border">
+                                </div>
+                                <div>
+                                    <label class="block text-xs font-medium text-slate-600 mb-1">提醒時機</label>
+                                    <select id="c_remind_offset" class="w-full rounded-md border-slate-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm p-2 border bg-white" onchange="window.toggleCustomTime(this.value)">
+                                        <option value="0">準時提醒</option>
+                                        <option value="5">前 5 分鐘</option>
+                                        <option value="15">前 15 分鐘</option>
+                                        <option value="custom">自訂時間</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div id="customTimeField" class="hidden">
+                                <label class="block text-xs font-medium text-slate-600 mb-1">自訂提醒時間</label>
+                                <input type="datetime-local" id="c_custom_time" class="w-full rounded-md border-slate-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm p-2 border">
+                            </div>
+                            <div class="grid grid-cols-2 gap-3">
+                                <div class="col-span-2 sm:col-span-1">
+                                    <label class="block text-xs font-medium text-slate-600 mb-1">提醒內容</label>
+                                    <input type="text" id="c_remind_msg" placeholder="例: 準備續約報價單" class="w-full rounded-md border-slate-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm p-2 border">
+                                </div>
+                                <div class="col-span-2 sm:col-span-1">
+                                    <label class="block text-xs font-medium text-slate-600 mb-1">提醒聲效</label>
+                                    <select id="c_remind_sound" class="w-full rounded-md border-slate-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm p-2 border bg-white">
+                                        <option value="beep">嗶嗶聲 (Beep)</option>
+                                        <option value="chime">鐘聲 (Chime)</option>
+                                        <option value="siren">警報聲 (Siren)</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </form>
+            </div>
+            <div class="px-5 py-3 border-t border-slate-200 bg-slate-50 flex justify-end gap-2">
+                <button onclick="window.closeClientEditModal()" class="px-4 py-2 text-sm font-medium text-slate-600 bg-white border border-slate-300 rounded-md hover:bg-slate-50 shadow-sm">取消</button>
+                <button type="submit" form="clientForm" class="px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-md hover:bg-indigo-700 shadow-sm">儲存</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 滿版鬧鐘閃爍遮罩 -->
+    <div id="alarmOverlay" class="fixed inset-0 hidden z-[9999] flex-col items-center justify-center bg-flash-danger backdrop-blur-md transition-all">
+        <div class="bg-white p-8 rounded-2xl shadow-2xl max-w-md w-full text-center border-4 border-red-500 transform scale-110">
+            <i class="fa-solid fa-bell text-6xl text-red-500 mb-4 animate-bounce"></i>
+            <h2 class="text-3xl font-bold text-slate-800 mb-2">約訪 / 追蹤提醒</h2>
+            <p id="alarmCompany" class="text-xl font-semibold text-indigo-700 mb-2"></p>
+            <p id="alarmMsg" class="text-slate-600 mb-8 text-lg"></p>
+            <div class="flex gap-4 justify-center">
+                <button onclick="window.snoozeAlarm()" class="flex-1 px-4 py-3 bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold rounded-lg transition-colors">稍後提醒 (10分)</button>
+                <button onclick="window.dismissAlarm()" class="flex-1 px-4 py-3 bg-red-600 hover:bg-red-700 text-white font-bold rounded-lg transition-colors shadow-lg">我知道了</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 狀態變更原因 Modal -->
+    <div id="statusReasonModal" class="fixed inset-0 bg-slate-900/60 hidden z-[70] items-center justify-center backdrop-blur-sm transition-opacity">
+        <div class="bg-white rounded-xl shadow-2xl w-full max-w-sm overflow-hidden mx-4 transform transition-all">
+            <div class="px-5 py-4 border-b border-slate-200 bg-slate-50">
+                <h3 class="text-lg font-bold text-slate-800"><i class="fa-solid fa-clock-rotate-left text-indigo-500 mr-2"></i>狀態變更原因</h3>
+            </div>
+            <div class="p-5">
+                <label class="block text-sm font-medium text-slate-700 mb-2">請說明變更為「<span id="pendingStatusText" class="text-indigo-600 font-bold"></span>」的原因 (選填)：</label>
+                <input type="text" id="status_change_reason_input" class="w-full rounded-md border-slate-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm p-2 border" placeholder="例: 缺料待補 / 測試完畢..." onkeydown="if(event.key==='Enter'){event.preventDefault();window.confirmStatusChange();}">
+            </div>
+            <div class="px-5 py-3 border-t border-slate-200 bg-slate-50 flex justify-end gap-2">
+                <button onclick="window.cancelStatusChange()" class="px-4 py-2 text-sm font-medium text-slate-600 bg-white border border-slate-300 rounded-md hover:bg-slate-50 shadow-sm transition-colors">取消</button>
+                <button onclick="window.confirmStatusChange()" class="px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-md hover:bg-indigo-700 shadow-sm transition-colors">確定變更</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="toastContainer" class="fixed bottom-5 right-5 z-[100] flex flex-col gap-2 pointer-events-none"></div>
+
+    <script>
+        // --- 核心狀態變數 ---
+        let reports = [];
+        let clientsData = [];
+        let editingId = null;
+        let editingClientId = null;
+        let currentStatusFilter = '全部';
+        let timeViewMode = 'month';
+        let activeFilterDate = null;
+        let displayWeekStart = new Date();
+        displayWeekStart.setDate(displayWeekStart.getDate() - displayWeekStart.getDay());
+        let currentRingingClient = null;
+        let alarmSoundInterval = null;
+        let excelExportDirHandle = null; 
+        let pendingStatusChange = null;
+
+        // File System Handlers
+        let currentAttachedFiles = []; 
+        let attachmentRootDirHandle = null;
+
+        // --- IndexedDB for File System Handles (記憶資料夾路徑) ---
+        const handleDBName = 'FAE_Handles_DB';
+        let handleDB = null;
+        
+        const initHandleDB = () => {
+            return new Promise((resolve, reject) => {
+                const req = indexedDB.open(handleDBName, 1);
+                req.onupgradeneeded = (e) => {
+                    const db = e.target.result;
+                    if (!db.objectStoreNames.contains('dirHandles')) {
+                        db.createObjectStore('dirHandles', { keyPath: 'id' });
+                    }
+                };
+                req.onsuccess = (e) => { handleDB = e.target.result; resolve(handleDB); };
+                req.onerror = () => reject('IndexedDB Error');
+            });
+        };
+
+        const saveHandleToDB = async (id, handle) => {
+            if (!handleDB) await initHandleDB();
+            const tx = handleDB.transaction('dirHandles', 'readwrite');
+            tx.objectStore('dirHandles').put({ id, handle });
+        };
+
+        const getHandleFromDB = async (id) => {
+            if (!handleDB) await initHandleDB();
+            return new Promise((resolve) => {
+                const tx = handleDB.transaction('dirHandles', 'readonly');
+                const req = tx.objectStore('dirHandles').get(id);
+                req.onsuccess = () => resolve(req.result ? req.result.handle : null);
+                req.onerror = () => resolve(null);
+            });
+        };
+
+        const verifyPermission = async (handle, readWrite) => {
+            const options = { mode: readWrite ? 'readwrite' : 'read' };
+            if ((await handle.queryPermission(options)) === 'granted') return true;
+            if ((await handle.requestPermission(options)) === 'granted') return true;
+            return false;
+        };
+
+        // --- 音效引擎 (Web Audio API) ---
+        window.AudioEngine = {
+            ctx: null,
+            init: function() {
+                try {
+                    const AudioContext = window.AudioContext || window.webkitAudioContext;
+                    this.ctx = new AudioContext();
+                } catch(e) { console.warn("Web Audio API not supported"); }
+            },
+            play: function(type) {
+                if (!this.ctx) return;
+                if (this.ctx.state === 'suspended') this.ctx.resume();
+                
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+                osc.connect(gain);
+                gain.connect(this.ctx.destination);
+                
+                const now = this.ctx.currentTime;
+                if (type === 'beep') {
+                    osc.type = 'square';
+                    osc.frequency.setValueAtTime(800, now);
+                    gain.gain.setValueAtTime(0.1, now);
+                    osc.start(now); osc.stop(now + 0.2);
+                } else if (type === 'chime') {
+                    osc.type = 'sine';
+                    osc.frequency.setValueAtTime(523.25, now);
+                    gain.gain.setValueAtTime(0.3, now);
+                    gain.gain.exponentialRampToValueAtTime(0.01, now + 1);
+                    osc.start(now); osc.stop(now + 1);
+                } else if (type === 'siren') {
+                    osc.type = 'sawtooth';
+                    osc.frequency.setValueAtTime(400, now);
+                    osc.frequency.linearRampToValueAtTime(800, now + 0.5);
+                    gain.gain.setValueAtTime(0.1, now);
+                    osc.start(now); osc.stop(now + 0.5);
+                } else {
+                    osc.type = 'sine'; osc.frequency.setValueAtTime(440, now);
+                    gain.gain.setValueAtTime(0.1, now); osc.start(now); osc.stop(now + 0.3);
+                }
+            }
+        };
+
+        // --- 全域函式設定 ---
+        window.toggleApiKey = () => {
+            const input = document.getElementById('apiKeyInput');
+            const btn = document.getElementById('saveApiKeyBtn');
+            if (input.type === 'password' && input.value) {
+                try { localStorage.setItem('fae_api_key', input.value); } catch(e) {}
+                input.type = 'text'; input.readOnly = true;
+                input.classList.add('opacity-50'); btn.textContent = '修改';
+                showToast('API Key 已儲存', 'success');
+            } else {
+                input.type = 'password'; input.readOnly = false;
+                input.classList.remove('opacity-50'); btn.textContent = '儲存';
+                input.focus();
+            }
+        };
+
+        window.toggleReminderFields = (checked) => {
+            const fields = document.getElementById('reminderFields');
+            if (checked) fields.classList.remove('hidden');
+            else fields.classList.add('hidden');
+        };
+
+        window.toggleCustomTime = (val) => {
+            const field = document.getElementById('customTimeField');
+            if (val === 'custom') field.classList.remove('hidden');
+            else field.classList.add('hidden');
+        };
+
+        window.toggleReportReminderFields = (checked) => {
+            const fields = document.getElementById('f_reminderFields');
+            if (checked) fields.classList.remove('hidden');
+            else fields.classList.add('hidden');
+        };
+
+        window.toggleReportCustomTime = (val) => {
+            const field = document.getElementById('f_customTimeField');
+            if (val === 'custom') field.classList.remove('hidden');
+            else field.classList.add('hidden');
+        };
+
+        const getDurationStr = (startStr, endStr) => {
+            if (!startStr || !endStr) return '';
+            const diff = new Date(endStr).getTime() - new Date(startStr).getTime();
+            if (diff < 0) return '時間異常';
+            const mins = Math.floor(diff / 60000);
+            const d = Math.floor(mins / 1440);
+            const h = Math.floor((mins % 1440) / 60);
+            const m = mins % 60;
+            let res = [];
+            if(d > 0) res.push(`${d}天`);
+            if(h > 0) res.push(`${h}小時`);
+            if(m > 0 || res.length === 0) res.push(`${m}分鐘`);
+            return res.join(' ');
+        };
+
+        const getStatusColor = (statusStr) => {
+            const s = String(statusStr || '');
+            if (s.includes('已過保') || s.includes('已到期') || s.includes('過期') || s.includes('異常')) return 'bg-red-50 text-red-600 font-bold shadow-sm ring-1 ring-red-300';
+            if (s.includes('當天最後一天') || s.includes('最後一天') || s.includes('今日到期')) return 'bg-yellow-50 text-yellow-600 font-bold shadow-sm ring-1 ring-yellow-300';
+            if (s.includes('未過保') || s.includes('未到期') || s.includes('正常') || s.includes('保內')) return 'bg-green-50 text-green-600 font-medium';
+            return 'bg-slate-100 text-slate-600';
+        };
+
+        window.openClientManager = () => {
+            document.getElementById('clientManagerModal').classList.remove('hidden');
+            document.getElementById('clientSearchInput').value = ''; 
+            window.renderClientList();
+        };
+        
+        window.closeClientEditModal = () => { document.getElementById('clientEditModal').classList.add('hidden'); };
+
+        // 儲存資料到 LocalStorage 的共用防呆函式
+        const saveToLocalStorage = () => {
+            try {
+                localStorage.setItem('fae_reports_data', JSON.stringify(reports));
+                localStorage.setItem('fae_clients_data', JSON.stringify(clientsData));
+            } catch(e) {
+                console.warn('環境限制：無法寫入 LocalStorage', e);
+            }
+        };
+
+        window.closeClientManager = () => { document.getElementById('clientManagerModal').classList.add('hidden'); };
+        
+        window.openClientEditModal = (id = null) => {
+            editingClientId = id;
+            document.getElementById('clientForm').reset();
+            document.getElementById('c_remind_toggle').checked = false;
+            window.toggleReminderFields(false);
+            window.toggleCustomTime('0');
+
+            if (id) {
+                const c = clientsData.find(x => x.id === id);
+                if (c) {
+                    document.getElementById('clientModalTitle').innerText = '修改客戶資料';
+                    document.getElementById('c_company').value = c.company;
+                    document.getElementById('c_sales').value = c.sales || '';
+                    document.getElementById('c_source').value = c.source || '';
+                    document.getElementById('c_entry_date').value = c.entryDate || '';
+                    document.getElementById('c_hw_expiry').value = c.hwExpiry || '';
+                    document.getElementById('c_hw_status').value = c.hwStatus || '';
+                    document.getElementById('c_sw_expiry').value = c.swExpiry || '';
+                    document.getElementById('c_sw_status').value = c.swStatus || '';
+                    
+                    if (c.reminderEnabled) {
+                        document.getElementById('c_remind_toggle').checked = true;
+                        window.toggleReminderFields(true);
+                        document.getElementById('c_appoint_time').value = c.appointmentDate || '';
+                        document.getElementById('c_remind_offset').value = c.reminderOffset || '0';
+                        window.toggleCustomTime(c.reminderOffset);
+                        if(c.reminderOffset === 'custom') document.getElementById('c_custom_time').value = c.customReminderDate || '';
+                        document.getElementById('c_remind_msg').value = c.reminderMsg || '';
+                        document.getElementById('c_remind_sound').value = c.reminderSound || 'beep';
+                    }
+                }
+            } else {
+                document.getElementById('clientModalTitle').innerText = '新增客戶資料';
+            }
+            document.getElementById('clientEditModal').classList.remove('hidden');
+        };
+
+        window.saveClient = (e) => {
+            e.preventDefault();
+            const clientObj = {
+                company: document.getElementById('c_company').value.trim(),
+                sales: document.getElementById('c_sales').value.trim(),
+                source: document.getElementById('c_source').value.trim(),
+                entryDate: document.getElementById('c_entry_date').value,
+                hwExpiry: document.getElementById('c_hw_expiry').value,
+                hwStatus: document.getElementById('c_hw_status').value,
+                swExpiry: document.getElementById('c_sw_expiry').value,
+                swStatus: document.getElementById('c_sw_status').value,
+                reminderEnabled: document.getElementById('c_remind_toggle').checked,
+                reminderTriggered: false
+            };
+
+            if (clientObj.reminderEnabled) {
+                clientObj.appointmentDate = document.getElementById('c_appoint_time').value;
+                clientObj.reminderOffset = document.getElementById('c_remind_offset').value;
+                clientObj.customReminderDate = document.getElementById('c_custom_time').value;
+                clientObj.reminderMsg = document.getElementById('c_remind_msg').value.trim();
+                clientObj.reminderSound = document.getElementById('c_remind_sound').value;
+
+                if (clientObj.reminderOffset === 'custom' && clientObj.customReminderDate) {
+                    const parsedTime = new Date(clientObj.customReminderDate).getTime();
+                    clientObj.reminderTriggerTime = isNaN(parsedTime) ? null : parsedTime;
+                } else if (clientObj.appointmentDate) {
+                    const aptTime = new Date(clientObj.appointmentDate).getTime();
+                    if (!isNaN(aptTime)) {
+                        const offsetMins = parseInt(clientObj.reminderOffset) || 0;
+                        clientObj.reminderTriggerTime = aptTime - (offsetMins * 60000);
+                    } else {
+                        clientObj.reminderTriggerTime = null;
+                    }
+                } else {
+                    clientObj.reminderTriggerTime = null; 
+                }
+            } else {
+                clientObj.reminderTriggerTime = null;
+            }
+
+            if (editingClientId) {
+                const idx = clientsData.findIndex(c => c.id === editingClientId);
+                if(idx > -1) {
+                    clientsData[idx] = { ...clientsData[idx], ...clientObj };
+                    showToast('客戶資料已更新', 'success');
+                }
+            } else {
+                clientObj.id = 'c-' + Date.now();
+                const existsIdx = clientsData.findIndex(c => c.company === clientObj.company);
+                if (existsIdx > -1) {
+                    clientsData[existsIdx] = { ...clientsData[existsIdx], ...clientObj };
+                    showToast('已更新現有同名客戶資料', 'success');
+                } else {
+                    clientsData.push(clientObj);
+                    showToast('客戶新增成功', 'success');
+                }
+            }
+            
+            saveToLocalStorage(); 
+            window.closeClientEditModal();
+            window.renderClientList();
+            window.renderList();
+        };
+
+        window.deleteClient = (id) => {
+            if(confirm('確定要刪除此客戶的資產資料嗎？')) {
+                clientsData = clientsData.filter(c => c.id !== id);
+                saveToLocalStorage(); 
+                window.renderClientList();
+                window.renderList();
+                showToast('客戶資料已刪除', 'info');
+            }
+        };
+
+        window.exportSystemData = () => {
+            try {
+                const systemData = {
+                    reports: reports,
+                    clientsData: clientsData,
+                    exportDate: new Date().toISOString()
+                };
+                const dataStr = JSON.stringify(systemData, null, 2);
+                const blob = new Blob([dataStr], { type: 'application/json' });
+                const url = URL.createObjectURL(blob);
+                const link = document.createElement('a');
+                link.href = url;
+                link.download = `FAE系統完整備份_${new Date().toISOString().slice(0,10)}.json`;
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+                URL.revokeObjectURL(url);
+                showToast('系統完整資料備份成功！', 'success');
+            } catch (error) {
+                console.error(error);
+                showToast('備份失敗！', 'error');
+            }
+        };
+
+        window.importSystemData = (event) => {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                try {
+                    const data = JSON.parse(e.target.result);
+                    let importMsg = [];
+                    
+                    if (data.reports && Array.isArray(data.reports)) {
+                        let newReportsCount = 0;
+                        let updatedReportsCount = 0;
+                        let skippedReportsCount = 0;
+
+                        data.reports.forEach(importedReport => {
+                            const existIdx = reports.findIndex(r => r.id === importedReport.id || (r.company === importedReport.company && r.time === importedReport.time));
+                            
+                            if (existIdx > -1) {
+                                const existingReport = reports[existIdx];
+                                
+                                const existingLatestTime = existingReport.statusHistory && existingReport.statusHistory.length > 0 
+                                    ? existingReport.statusHistory[existingReport.statusHistory.length - 1].timestamp 
+                                    : existingReport.timestamp;
+                                    
+                                const importedLatestTime = importedReport.statusHistory && importedReport.statusHistory.length > 0 
+                                    ? importedReport.statusHistory[importedReport.statusHistory.length - 1].timestamp 
+                                    : importedReport.timestamp;
+
+                                if (importedLatestTime >= existingLatestTime) {
+                                    reports[existIdx] = { ...existingReport, ...importedReport };
+                                    updatedReportsCount++;
+                                } else {
+                                    skippedReportsCount++; 
+                                }
+                            } else {
+                                reports.push(importedReport);
+                                newReportsCount++;
+                            }
+                        });
+                        importMsg.push(`紀錄 (新增${newReportsCount}, 更新${updatedReportsCount}, 略過較舊資料${skippedReportsCount})`);
+                    }
+
+                    if (data.clientsData && Array.isArray(data.clientsData)) {
+                        let newClientsCount = 0;
+                        let updatedClientsCount = 0;
+
+                        data.clientsData.forEach(importedClient => {
+                            const existIdx = clientsData.findIndex(c => c.company === importedClient.company);
+                            if (existIdx > -1) {
+                                clientsData[existIdx] = { 
+                                    ...importedClient, 
+                                    id: clientsData[existIdx].id, 
+                                    reminderEnabled: clientsData[existIdx].reminderEnabled,
+                                    reminderTriggered: clientsData[existIdx].reminderTriggered,
+                                    reminderTriggerTime: clientsData[existIdx].reminderTriggerTime
+                                };
+                                updatedClientsCount++;
+                            } else {
+                                clientsData.push(importedClient);
+                                newClientsCount++;
+                            }
+                        });
+                        importMsg.push(`客戶 (新增${newClientsCount}, 更新${updatedClientsCount})`);
+                    }
+                    
+                    saveToLocalStorage(); 
+
+                    updateMonthFilter();
+                    window.renderClientList();
+                    
+                    window.setTimeViewMode('all'); 
+                    
+                    showToast(`資料還原成功！<br><span class="text-xs opacity-75">包含: ${importMsg.join(', ')}</span>`, 'success');
+                } catch (error) {
+                    console.error(error);
+                    showToast('檔案格式錯誤，無法匯入！', 'error');
+                }
+                event.target.value = ''; 
+            };
+            reader.readAsText(file);
+        };
+
+        window.handleImportClients = (e) => {
+            const file = e.target.files[0];
+            if(!file) return;
+            const reader = new FileReader();
+            reader.onload = (evt) => {
+                try {
+                    const data = new Uint8Array(evt.target.result);
+                    const workbook = XLSX.read(data, {type: 'array'});
+                    const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+                    
+                    const rows = XLSX.utils.sheet_to_json(firstSheet, { header: 1, raw: false, defval: "" });
+                    
+                    let headerRowIndex = -1;
+                    let headerMap = {};
+                    
+                    for (let i = 0; i < Math.min(rows.length, 30); i++) {
+                        const row = rows[i];
+                        if (!row || !Array.isArray(row)) continue;
+                        
+                        const normalizedRow = row.map(cell => String(cell).replace(/[\s\n\r ]/g, '').toLowerCase());
+                        
+                        const compIdx = normalizedRow.findIndex(cell => cell.includes('公司') || cell.includes('客戶') || cell === 'company');
+                        
+                        if (compIdx !== -1) {
+                            headerRowIndex = i;
+                            normalizedRow.forEach((colName, idx) => {
+                                if (colName) headerMap[colName] = idx;
+                            });
+                            break;
+                        }
+                    }
+
+                    if (headerRowIndex === -1) {
+                        showToast('找不到「公司」或「客戶」標題，請確認 Excel 內容', 'error');
+                        e.target.value = '';
+                        return;
+                    }
+
+                    let importCount = 0;
+                    
+                    for (let i = headerRowIndex + 1; i < rows.length; i++) {
+                        const row = rows[i];
+                        if (!row || !Array.isArray(row)) continue;
+                        
+                        const getVal = (keywords) => {
+                            for (const key in headerMap) {
+                                if (keywords.some(kw => key.includes(kw.toLowerCase()))) {
+                                    const val = row[headerMap[key]];
+                                    return val !== undefined && val !== null ? String(val).trim() : '';
+                                }
+                            }
+                            return '';
+                        };
+
+                        const companyName = getVal(['公司', '客戶', 'company']);
+                        
+                        if (companyName && companyName !== '總計' && companyName !== '合計') {
+                            const existIdx = clientsData.findIndex(c => c.company === companyName);
+                            
+                            const extractedData = {
+                                company: companyName,
+                                sales: getVal(['業務']),
+                                source: getVal(['來源', 'source']),
+                                entryDate: getVal(['驗收', '進場', 'date']),
+                                hwExpiry: getVal(['硬體保固', '硬體到期', '硬體維運', '硬體']),
+                                hwStatus: getVal(['硬體狀態', 'hwstatus']),
+                                swExpiry: getVal(['軟體維運', '軟體到期', '軟體']),
+                                swStatus: getVal(['軟體狀態', 'swstatus'])
+                            };
+
+                            if(existIdx > -1) {
+                                clientsData[existIdx] = { 
+                                    ...clientsData[existIdx], 
+                                    ...extractedData 
+                                };
+                            } else {
+                                const newObj = {
+                                    ...extractedData,
+                                    id: 'c-' + Date.now() + Math.random().toString(36).substr(2, 5),
+                                    reminderEnabled: false
+                                };
+                                clientsData.push(newObj);
+                            }
+                            importCount++;
+                        }
+                    }
+                    
+                    saveToLocalStorage(); 
+
+                    window.renderClientList();
+                    window.renderList();
+                    if(importCount > 0) {
+                        showToast(`成功匯入/更新 ${importCount} 筆資料！`, 'success');
+                    } else {
+                        showToast('已讀取檔案，但找不到有效的客戶資料列', 'error');
+                    }
+                } catch(err) {
+                    console.error(err);
+                    showToast('匯入失敗，無法解析該 Excel 檔案', 'error');
+                }
+                e.target.value = ''; 
+            };
+            reader.readAsArrayBuffer(file);
+        };
+
+        window.renderClientList = () => {
+            const tbody = document.getElementById('clientTableBody');
+            const emptyState = document.getElementById('clientEmptyState');
+            const searchKeyword = document.getElementById('clientSearchInput').value.trim().toLowerCase();
+            
+            tbody.innerHTML = '';
+            let count = 0;
+
+            clientsData.forEach(c => {
+                if (searchKeyword && !c.company.toLowerCase().includes(searchKeyword)) return;
+                count++;
+                
+                const hwColor = getStatusColor(c.hwStatus);
+                const swColor = getStatusColor(c.swStatus);
+                let alarmIcon = c.reminderEnabled ? `<i class="fa-solid fa-bell text-amber-500" title="已開啟鬧鐘"></i>` : `<i class="fa-solid fa-bell-slash text-slate-300"></i>`;
+                
+                tbody.innerHTML += `
+                    <tr class="hover:bg-slate-50/80 transition-colors">
+                        <td class="py-3 px-4 font-bold text-indigo-700">${c.company}</td>
+                        <td class="py-3 px-4">${c.sales || '-'}</td>
+                        <td class="py-3 px-4">${c.source || '-'}</td>
+                        <td class="py-3 px-4 text-slate-500">${c.entryDate || '-'}</td>
+                        <td class="py-3 px-4 border-l border-slate-200 text-slate-500">${c.hwExpiry || '-'}</td>
+                        <td class="py-3 px-4"><span class="px-2 py-0.5 rounded text-[11px] ${hwColor}">${c.hwStatus || '-'}</span></td>
+                        <td class="py-3 px-4 border-l border-slate-200 text-slate-500">${c.swExpiry || '-'}</td>
+                        <td class="py-3 px-4"><span class="px-2 py-0.5 rounded text-[11px] ${swColor}">${c.swStatus || '-'}</span></td>
+                        <td class="py-3 px-4 text-center">${alarmIcon}</td>
+                        <td class="py-3 px-4 text-center">
+                            <button onclick="window.openClientEditModal('${c.id}')" class="text-blue-500 hover:text-blue-700 p-1 mx-1"><i class="fa-solid fa-pen"></i></button>
+                            <button onclick="window.deleteClient('${c.id}')" class="text-red-500 hover:text-red-700 p-1 mx-1"><i class="fa-solid fa-trash"></i></button>
+                        </td>
+                    </tr>
+                `;
+            });
+
+            if (count === 0) {
+                emptyState.classList.remove('hidden');
+                tbody.parentElement.classList.add('hidden');
+            } else {
+                emptyState.classList.add('hidden');
+                tbody.parentElement.classList.remove('hidden');
+            }
+        };
+
+        window.handleExportClients = () => {
+            if(clientsData.length === 0) return showToast('沒有客戶資料可匯出', 'error');
+            const wsData = clientsData.map(c => ({
+                '公司名稱': c.company,
+                '業務人員': c.sales || '',
+                '來源': c.source || '',
+                '驗收/進場日期': c.entryDate || '',
+                '硬體保固到期': c.hwExpiry || '',
+                '硬體狀態': c.hwStatus || '',
+                '軟體維運到期': c.swExpiry || '',
+                '軟體狀態': c.swStatus || ''
+            }));
+            const ws = XLSX.utils.json_to_sheet(wsData);
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, "客戶資產名單");
+            XLSX.writeFile(wb, `客戶資產管理名單_${new Date().toISOString().slice(0,10)}.xlsx`);
+            showToast('已成功匯出 Excel', 'success');
+        };
+
+        window.checkAlarms = () => {
+            const now = Date.now();
+            
+            if(clientsData) {
+                clientsData.forEach(client => {
+                    if (client.reminderEnabled && !client.reminderTriggered && client.reminderTriggerTime) {
+                        if (now >= client.reminderTriggerTime) {
+                            client.reminderTriggered = true; 
+                            triggerAlarmUI(client, 'client');
+                        }
+                    }
+                });
+            }
+
+            if(reports) {
+                reports.forEach(report => {
+                    if (report.reminderEnabled && !report.reminderTriggered && report.reminderTriggerTime) {
+                        if (now >= report.reminderTriggerTime) {
+                            report.reminderTriggered = true; 
+                            triggerAlarmUI(report, 'report');
+                        }
+                    }
+                });
+            }
+        };
+
+        function triggerAlarmUI(item, type) {
+            currentRingingClient = item;
+            document.getElementById('alarmCompany').innerText = item.company;
+            
+            let msg = item.reminderMsg;
+            if(!msg) {
+                msg = (type === 'client') ? '約訪時間已到，請確認處理進度！' : `紀錄追蹤提醒：${item.desc}`;
+            }
+            
+            document.getElementById('alarmMsg').innerText = msg;
+            document.getElementById('alarmOverlay').classList.remove('hidden');
+            document.getElementById('alarmOverlay').classList.add('flex');
+            
+            AudioEngine.play(item.reminderSound || 'beep');
+            alarmSoundInterval = setInterval(() => {
+                AudioEngine.play(item.reminderSound || 'beep');
+            }, 3000);
+        }
+
+        window.dismissAlarm = () => {
+            clearInterval(alarmSoundInterval);
+            document.getElementById('alarmOverlay').classList.add('hidden');
+            document.getElementById('alarmOverlay').classList.remove('flex');
+            currentRingingClient = null;
+            window.renderClientList(); 
+            window.renderList();
+        };
+
+        window.snoozeAlarm = () => {
+            clearInterval(alarmSoundInterval);
+            document.getElementById('alarmOverlay').classList.add('hidden');
+            document.getElementById('alarmOverlay').classList.remove('flex');
+            if (currentRingingClient) {
+                currentRingingClient.reminderTriggered = false;
+                currentRingingClient.reminderTriggerTime = Date.now() + (10 * 60000); 
+                showToast(`已延後 10 分鐘提醒: ${currentRingingClient.company}`, 'info');
+            }
+            currentRingingClient = null;
+        };
+
+        document.addEventListener('DOMContentLoaded', () => {
+            document.body.addEventListener('click', function unlockAudio() {
+                if (!AudioEngine.ctx) {
+                    AudioEngine.init();
+                }
+                if (AudioEngine.ctx && AudioEngine.ctx.state === 'suspended') {
+                    AudioEngine.ctx.resume();
+                }
+                document.body.removeEventListener('click', unlockAudio);
+            }, { once: true });
+
+            setInterval(window.checkAlarms, 10000);
+
+            try {
+                const savedKey = localStorage.getItem('fae_api_key');
+                if(savedKey) {
+                    const input = document.getElementById('apiKeyInput');
+                    input.value = savedKey; input.type = 'text'; input.readOnly = true; input.classList.add('opacity-50');
+                    document.getElementById('saveApiKeyBtn').textContent = '修改';
+                }
+            } catch(e) {}
+
+            const dateDisplay = document.getElementById('currentDateDisplay');
+            dateDisplay.textContent = new Date().toLocaleDateString('zh-TW', { year: 'numeric', month: 'long', day: 'numeric' });
+            
+            const now = new Date();
+            now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
+            document.getElementById('f_time').value = now.toISOString().slice(0, 16);
+
+            try {
+                const savedReports = localStorage.getItem('fae_reports_data');
+                const savedClients = localStorage.getItem('fae_clients_data');
+                
+                if (savedReports !== null) {
+                    try {
+                        const parsedReports = JSON.parse(savedReports);
+                        if (Array.isArray(parsedReports)) {
+                            reports = parsedReports;
+                        } else {
+                            reports = generateMockData();
+                        }
+                    } catch(e) { reports = generateMockData(); }
+                } else {
+                    reports = generateMockData();
+                }
+                
+                if (savedClients !== null) {
+                    try {
+                        const parsedClients = JSON.parse(savedClients);
+                        if (Array.isArray(parsedClients)) {
+                            clientsData = parsedClients;
+                        }
+                    } catch(e) { /* ignore */ }
+                }
+            } catch (e) {
+                console.warn('LocalStorage is blocked by the environment.', e);
+                if(reports.length === 0) reports = generateMockData();
+            }
+
+            activeFilterDate = getDayKey(new Date());
+            
+            updateMonthFilter();
+            window.renderCalendarStrip();
+            window.renderList();
+
+            document.getElementById('issueForm').addEventListener('submit', handleFormSubmit);
+            document.getElementById('monthFilter').addEventListener('change', (e) => {
+                activeFilterDate = null;
+                const [year, month] = e.target.value.split('-');
+                let firstDayOfMonth = new Date(year, parseInt(month) - 1, 1);
+                displayWeekStart = new Date(firstDayOfMonth);
+                displayWeekStart.setDate(displayWeekStart.getDate() - displayWeekStart.getDay());
+                if (timeViewMode !== 'month') window.setTimeViewMode('month');
+                window.renderCalendarStrip(); window.renderList();
+            });
+            document.getElementById('smartExportBtn').addEventListener('click', handleSmartExport);
+            
+            const setSaveDirBtnElem = document.getElementById('setSaveDirBtn');
+            if(setSaveDirBtnElem) {
+                setSaveDirBtnElem.addEventListener('click', window.handleChangeExportPath);
+                if (!window.showDirectoryPicker) {
+                    setSaveDirBtnElem.style.display = 'none';
+                    const attachBtnElem = document.getElementById('setAttachmentDirBtn');
+                    if(attachBtnElem) attachBtnElem.style.display = 'none';
+                    document.getElementById('dirWarning').classList.add('hidden');
+                }
+            }
+            
+            window.setupFileDragAndDrop();
+
+            initHandleDB().then(async () => {
+                attachmentRootDirHandle = await getHandleFromDB('attachmentDir');
+                if (attachmentRootDirHandle) {
+                    const btn = document.getElementById('setAttachmentDirBtn');
+                    if(btn) {
+                        btn.innerHTML = `<i class="fa-solid fa-folder-check"></i> 附件目錄已設`;
+                        btn.classList.remove('bg-amber-500', 'hover:bg-amber-600');
+                        btn.classList.add('bg-blue-600', 'hover:bg-blue-700');
+                    }
+                    document.getElementById('dirWarning').classList.add('hidden');
+                }
+
+                excelExportDirHandle = await getHandleFromDB('exportDir');
+                if (excelExportDirHandle) {
+                    const btn = document.getElementById('setSaveDirBtn');
+                    if(btn) {
+                        btn.innerHTML = `<i class="fa-solid fa-folder-check"></i> 報表路徑已設`;
+                        btn.classList.remove('bg-amber-500', 'hover:bg-amber-600');
+                        btn.classList.add('bg-blue-600', 'hover:bg-blue-700');
+                    }
+                }
+            }).catch(e => console.warn('無法載入資料夾記憶', e));
+        });
+
+        window.setupFileDragAndDrop = () => {
+            const dropZone = document.getElementById('dropZone');
+            const fileInput = document.getElementById('f_file');
+            if(!dropZone || !fileInput) return;
+            
+            ['dragenter', 'dragover'].forEach(eventName => {
+                dropZone.addEventListener(eventName, e => { e.preventDefault(); e.stopPropagation(); }, false);
+                dropZone.addEventListener(eventName, () => dropZone.classList.add('bg-indigo-50', 'border-indigo-400'), false);
+            });
+
+            ['dragleave', 'drop'].forEach(eventName => {
+                dropZone.addEventListener(eventName, e => { e.preventDefault(); e.stopPropagation(); }, false);
+                dropZone.addEventListener(eventName, () => dropZone.classList.remove('bg-indigo-50', 'border-indigo-400'), false);
+            });
+
+            dropZone.addEventListener('drop', (e) => window.handleFiles(e.dataTransfer.files), false);
+            fileInput.addEventListener('change', function() { window.handleFiles(this.files); });
+        };
+
+        window.renderAttachedFiles = () => {
+            const display = document.getElementById('fileListDisplay');
+            const container = document.getElementById('fileListContainer');
+            
+            if(container) container.innerHTML = '';
+
+            if (currentAttachedFiles.length === 0) {
+                display.textContent = '尚未選擇檔案';
+                display.classList.remove('text-indigo-600', 'font-medium');
+                const fileInput = document.getElementById('f_file');
+                if (fileInput) fileInput.value = ''; 
+            } else {
+                display.textContent = `已選擇 ${currentAttachedFiles.length} 個檔案`;
+                display.classList.add('text-indigo-600', 'font-medium');
+                
+                if(container) {
+                    currentAttachedFiles.forEach((file, index) => {
+                        const nameParts = file.name.split('.');
+                        const ext = nameParts.length > 1 ? nameParts.pop().toUpperCase() : '';
+                        const name = nameParts.join('.');
+                        const extDisplay = ext ? `.${ext}` : '未知';
+                        
+                        container.innerHTML += `
+                            <div class="flex items-center justify-between p-2 text-sm bg-white border border-slate-200 shadow-sm rounded-md mt-2 group hover:border-indigo-300 transition-colors">
+                                <div class="flex items-center gap-2 overflow-hidden">
+                                    <i class="fa-solid fa-file-lines text-slate-400 group-hover:text-indigo-500 transition-colors shrink-0"></i>
+                                    <span class="truncate text-slate-700 font-medium" title="${file.name}">${name}</span>
+                                </div>
+                                <div class="flex items-center gap-2 shrink-0">
+                                    <span class="text-xs text-slate-500 bg-slate-100 border border-slate-200 px-2 py-0.5 rounded font-mono">${extDisplay}</span>
+                                    <button type="button" onclick="window.removeAttachedFile(${index})" class="text-slate-400 hover:text-red-500 hover:bg-red-50 w-6 h-6 rounded flex items-center justify-center transition-colors" title="移除此檔案">
+                                        <i class="fa-solid fa-xmark"></i>
+                                    </button>
+                                </div>
+                            </div>
+                        `;
+                    });
+                }
+            }
+
+            if (!attachmentRootDirHandle && window.showDirectoryPicker && currentAttachedFiles.length > 0) {
+                document.getElementById('dirWarning').classList.remove('hidden');
+            } else {
+                document.getElementById('dirWarning').classList.add('hidden');
+            }
+        };
+
+        window.handleFiles = (files) => {
+            if (!files || files.length === 0) {
+                currentAttachedFiles = [];
+            } else {
+                Array.from(files).forEach(newFile => {
+                    if (!currentAttachedFiles.some(existing => existing.name === newFile.name)) {
+                        currentAttachedFiles.push(newFile);
+                    }
+                });
+            }
+            window.renderAttachedFiles();
+        };
+
+        window.removeAttachedFile = (index) => {
+            currentAttachedFiles.splice(index, 1);
+            window.renderAttachedFiles();
+        };
+
+        window.handleSetAttachmentRootDir = async () => {
+            try {
+                attachmentRootDirHandle = await window.showDirectoryPicker({ mode: 'readwrite' });
+                await saveHandleToDB('attachmentDir', attachmentRootDirHandle); 
+                const btn = document.getElementById('setAttachmentDirBtn');
+                if(btn) {
+                    btn.innerHTML = `<i class="fa-solid fa-folder-check"></i> 附件目錄已設`;
+                    btn.classList.remove('bg-amber-500', 'hover:bg-amber-600');
+                    btn.classList.add('bg-blue-600', 'hover:bg-blue-700');
+                }
+                document.getElementById('dirWarning').classList.add('hidden');
+                showToast(`附件儲存根目錄已設定為：${attachmentRootDirHandle.name}`, 'success');
+            } catch (error) {
+                if (error.name === 'SecurityError') {
+                    showToast('系統限制：目前預覽環境無法使用本機資料夾選取功能', 'error');
+                } else if (error.name !== 'AbortError') {
+                    showToast('設定附件目錄失敗', 'error');
+                }
+            }
+        };
+
+        window.saveFilesToLocalFileSystem = async (companyName, dateString, filesToSave) => {
+            if (!attachmentRootDirHandle || filesToSave.length === 0) return true; 
+            
+            const hasPermission = await verifyPermission(attachmentRootDirHandle, true);
+            if (!hasPermission) {
+                showToast('未獲得附件目錄的寫入權限，請重新授權', 'error');
+                return false;
+            }
+
+            try {
+                const safeCompanyName = companyName.replace(/[\\/:*?"<>|]/g, '_') || '未命名公司';
+                const companyDirHandle = await attachmentRootDirHandle.getDirectoryHandle(safeCompanyName, { create: true });
+                const dateDirHandle = await companyDirHandle.getDirectoryHandle(dateString, { create: true });
+
+                for (const file of filesToSave) {
+                    const fileHandle = await dateDirHandle.getFileHandle(file.name, { create: true });
+                    const writable = await fileHandle.createWritable();
+                    await writable.write(file);
+                    await writable.close();
+                }
+                return true;
+            } catch (error) {
+                console.error('File saving failed:', error);
+                throw error;
+            }
+        };
+
+        async function handleFormSubmit(e) {
+            e.preventDefault();
+            const submitBtn = document.getElementById('submitBtn');
+            const originalBtnHtml = submitBtn.innerHTML;
+            
+            const selectedStatus = document.querySelector('input[name="f_status"]:checked').value;
+            const companyName = document.getElementById('f_company').value.trim();
+            const issueTime = document.getElementById('f_time').value;
+            const taskContent = document.getElementById('f_task_content').value.trim();
+            const statusReason = document.getElementById('f_status_reason').value.trim();
+            
+            const dateObj = new Date(issueTime);
+            const dateString = `${dateObj.getFullYear()}-${String(dateObj.getMonth() + 1).padStart(2, '0')}-${String(dateObj.getDate()).padStart(2, '0')}`;
+            const attachmentsToSave = [...currentAttachedFiles];
+
+            submitBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> 處理中...';
+            submitBtn.disabled = true;
+
+            try {
+                if (attachmentsToSave.length > 0) {
+                    if(attachmentRootDirHandle) {
+                        await window.saveFilesToLocalFileSystem(companyName, dateString, attachmentsToSave);
+                        showToast(`附件已自動存入: ${companyName}/${dateString}/`, 'success');
+                    }
+                }
+                const attachmentsMeta = attachmentsToSave.map(f => ({ name: f.name, type: f.type }));
+
+                let reportToUpdate = editingId ? reports.find(r => r.id === editingId) : null;
+                
+                const reportData = {
+                    time: issueTime,
+                    company: companyName,
+                    taskContent: taskContent,
+                    desc: document.getElementById('f_desc').value.trim(),
+                    impact: document.getElementById('f_impact').value.trim(),
+                    cause: document.getElementById('f_cause').value.trim(),
+                    handler: document.getElementById('f_handler').value,
+                    actionType: document.getElementById('f_action_type').value,
+                    actionDesc: document.getElementById('f_action_desc').value.trim(),
+                    progress: document.getElementById('f_progress').value.trim(),
+                    improvement: document.getElementById('f_improvement').value.trim(),
+                    notes: document.getElementById('f_notes').value.trim(),
+                    status: selectedStatus,
+                    timestamp: new Date(issueTime).getTime(),
+                    reminderEnabled: document.getElementById('f_remind_toggle').checked,
+                    reminderTriggered: false
+                };
+
+                if(attachmentsMeta.length > 0) reportData.attachments = attachmentsMeta;
+
+                if (reportData.reminderEnabled) {
+                    reportData.appointmentDate = document.getElementById('f_appoint_time').value;
+                    reportData.reminderOffset = document.getElementById('f_remind_offset').value;
+                    reportData.customReminderDate = document.getElementById('f_custom_time').value;
+                    reportData.reminderMsg = document.getElementById('f_remind_msg').value.trim();
+                    reportData.reminderSound = document.getElementById('f_remind_sound').value;
+
+                    if (reportData.reminderOffset === 'custom' && reportData.customReminderDate) {
+                        const parsedTime = new Date(reportData.customReminderDate).getTime();
+                        reportData.reminderTriggerTime = isNaN(parsedTime) ? null : parsedTime;
+                    } else if (reportData.appointmentDate) {
+                        const aptTime = new Date(reportData.appointmentDate).getTime();
+                        if (!isNaN(aptTime)) {
+                            const offsetMins = parseInt(reportData.reminderOffset) || 0;
+                            reportData.reminderTriggerTime = aptTime - (offsetMins * 60000);
+                        } else {
+                            reportData.reminderTriggerTime = null;
+                        }
+                    } else {
+                        reportData.reminderTriggerTime = null; 
+                    }
+                } else {
+                    reportData.reminderTriggerTime = null;
+                }
+
+                if (reportToUpdate) {
+                    let currentHistory = reportToUpdate.statusHistory ? [...reportToUpdate.statusHistory] : [];
+                    
+                    const isContentChanged = (
+                        reportToUpdate.taskContent !== taskContent ||
+                        reportToUpdate.desc !== reportData.desc ||
+                        reportToUpdate.impact !== reportData.impact ||
+                        reportToUpdate.cause !== reportData.cause ||
+                        reportToUpdate.actionType !== reportData.actionType ||
+                        reportToUpdate.actionDesc !== reportData.actionDesc ||
+                        reportToUpdate.progress !== reportData.progress ||
+                        reportToUpdate.improvement !== reportData.improvement ||
+                        reportToUpdate.notes !== reportData.notes ||
+                        reportToUpdate.handler !== reportData.handler
+                    );
+
+                    if (reportToUpdate.status !== selectedStatus || statusReason !== '' || reportToUpdate.time !== issueTime || isContentChanged) {
+                        
+                        let finalReason = '';
+                        
+                        if (statusReason !== '') {
+                            finalReason = statusReason;
+                        } else {
+                            if (reportToUpdate.status !== selectedStatus) {
+                                finalReason = '狀態變更';
+                            } else if (reportToUpdate.time !== issueTime) {
+                                finalReason = '變更發生時間';
+                            } else if (reportToUpdate.handler !== reportData.handler) {
+                                finalReason = '變更處理人員';
+                            } else if (isContentChanged) {
+                                finalReason = '更新內容/進度';
+                            }
+                        }
+
+                        currentHistory.push({ 
+                            status: selectedStatus, 
+                            timestamp: Date.now(),
+                            reason: finalReason 
+                        });
+                    }
+                    
+                    reportData.statusHistory = currentHistory;
+
+                    if (selectedStatus === '已完成' && reportToUpdate.status !== '已完成') {
+                        reportData.completedTime = new Date().toISOString();
+                    } else if (selectedStatus !== '已完成') {
+                        reportData.completedTime = null;
+                    } else {
+                        reportData.completedTime = reportToUpdate.completedTime;
+                    }
+                    
+                    Object.assign(reportToUpdate, reportData);
+                    showToast('回報紀錄修改成功！', 'success');
+                    window.cancelEdit();
+                } else {
+                    reportData.id = 'rep-' + Date.now();
+                    reportData.statusHistory = [{ status: selectedStatus, timestamp: Date.now(), reason: statusReason || '新建紀錄' }];
+                    if (selectedStatus === '已完成') reportData.completedTime = new Date().toISOString();
+                    reports.push(reportData);
+                    showToast('回報紀錄新增成功！', 'success');
+                    document.getElementById('issueForm').reset();
+                    
+                    document.getElementById('f_remind_toggle').checked = false;
+                    window.toggleReportReminderFields(false);
+                    document.getElementById('f_status_reason').value = '';
+                    currentAttachedFiles = [];
+                    window.renderAttachedFiles();
+                    
+                    const now = new Date(); now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
+                    document.getElementById('f_time').value = now.toISOString().slice(0, 16);
+                }
+                
+                reports.sort((a, b) => b.timestamp - a.timestamp);
+                saveToLocalStorage(); 
+                updateMonthFilter();
+                document.getElementById('monthFilter').value = getMonthKey(new Date(issueTime));
+                activeFilterDate = getDayKey(new Date(issueTime));
+                displayWeekStart = new Date(issueTime);
+                displayWeekStart.setDate(displayWeekStart.getDate() - displayWeekStart.getDay());
+                window.renderCalendarStrip();
+                window.renderList();
+            } finally {
+                submitBtn.innerHTML = originalBtnHtml;
+                submitBtn.disabled = false;
+            }
+        }
+
+        window.changeStatus = (selectElem, id) => {
+            const report = reports.find(r => r.id === id);
+            if(report) {
+                if (report.status !== selectElem.value) {
+                    pendingStatusChange = { id: id, newStatus: selectElem.value, elem: selectElem, oldStatus: report.status };
+                    document.getElementById('pendingStatusText').textContent = selectElem.value;
+                    document.getElementById('statusReasonModal').classList.remove('hidden');
+                    document.getElementById('statusReasonModal').classList.add('flex');
+                    document.getElementById('status_change_reason_input').value = '';
+                    document.getElementById('status_change_reason_input').focus();
+                }
+            }
+        };
+
+        window.confirmStatusChange = () => {
+            if (!pendingStatusChange) return;
+            const reason = document.getElementById('status_change_reason_input').value.trim();
+            const { id, newStatus } = pendingStatusChange;
+            const report = reports.find(r => r.id === id);
+            
+            if (report) {
+                if (!report.statusHistory) report.statusHistory = [];
+                report.statusHistory.push({ status: newStatus, timestamp: Date.now(), reason: reason });
+                report.status = newStatus;
+                
+                if (newStatus === '已完成') report.completedTime = new Date().toISOString();
+                else report.completedTime = null;
+                
+                saveToLocalStorage(); 
+                window.renderList();
+                showToast(`狀態已更新為：${newStatus}`, 'success');
+            }
+            window.closeStatusReasonModal();
+        };
+
+        window.cancelStatusChange = () => {
+            if (pendingStatusChange && pendingStatusChange.elem) {
+                pendingStatusChange.elem.value = pendingStatusChange.oldStatus;
+            }
+            window.closeStatusReasonModal();
+        };
+
+        window.closeStatusReasonModal = () => {
+            document.getElementById('statusReasonModal').classList.add('hidden');
+            document.getElementById('statusReasonModal').classList.remove('flex');
+            pendingStatusChange = null;
+        };
+
+        window.changeHandler = (selectElem, id) => {
+            const report = reports.find(r => r.id === id);
+            if(report) {
+                report.handler = selectElem.value;
+                saveToLocalStorage(); 
+                window.renderList();
+                showToast(`處理人員更新為：${selectElem.value}`, 'success');
+            }
+        };
+
+        window.confirmDelete = (id) => {
+            if(confirm('確定要刪除這筆紀錄嗎？無法復原。')) {
+                reports = reports.filter(r => r.id !== id);
+                saveToLocalStorage(); 
+                updateMonthFilter();
+                window.renderList();
+                showToast('紀錄已刪除', 'info');
+            }
+        };
+
+        window.exportSingleReport = async (id) => {
+            const r = reports.find(x => x.id === id);
+            if (!r) return;
+
+            const wsData = [{
+                '開始時間': new Date(r.time).toLocaleString('zh-TW', {hour12: false}),
+                '結束時間': r.completedTime ? new Date(r.completedTime).toLocaleString('zh-TW', {hour12: false}) : '',
+                '公司/客戶': r.company,
+                '工作內容': r.taskContent || '',
+                '處理人員': r.handler || '待指定',
+                '狀態': r.status,
+                '問題描述': r.desc,
+                '影響範圍': r.impact,
+                '原因': r.cause,
+                '處置類型': r.actionType,
+                '當下處置': r.actionDesc,
+                '目前進度': r.progress || '',
+                '後續改善': r.improvement || '',
+                '狀態歷程': (r.statusHistory || []).map(h => {
+                    const hDate = new Date(h.timestamp).toLocaleString('zh-TW', {month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit'});
+                    const reasonStr = h.reason ? `[${h.reason}]` : '';
+                    return `${h.status}${reasonStr}(${hDate})`;
+                }).join(' -> '),
+                '補充': r.notes || ''
+            }];
+            const ws = XLSX.utils.json_to_sheet(wsData);
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, "異常紀錄");
+            
+            const dateObj = new Date(r.time);
+            const dateString = `${dateObj.getFullYear()}-${String(dateObj.getMonth() + 1).padStart(2, '0')}-${String(dateObj.getDate()).padStart(2, '0')}`;
+            const safeCompanyName = r.company.replace(/[\\/:*?"<>|]/g, '_') || '未命名公司';
+            const filename = `單筆報表_${safeCompanyName}_${dateString}_${r.timestamp}.xlsx`;
+
+            if (!window.showDirectoryPicker) {
+                XLSX.writeFile(wb, filename);
+                return showToast('單筆報表匯出成功', 'success');
+            }
+
+            if (excelExportDirHandle) {
+                const hasPerm = await verifyPermission(excelExportDirHandle, true);
+                if (!hasPerm) excelExportDirHandle = null; 
+            }
+
+            if (!excelExportDirHandle) {
+                try {
+                    excelExportDirHandle = await window.showDirectoryPicker({ mode: 'readwrite' });
+                    await saveHandleToDB('exportDir', excelExportDirHandle); 
+                    const btn = document.getElementById('setSaveDirBtn');
+                    if(btn) {
+                        btn.innerHTML = `<i class="fa-solid fa-folder-check"></i> 報表路徑已設`;
+                        btn.classList.remove('bg-amber-500', 'hover:bg-amber-600');
+                        btn.classList.add('bg-blue-600', 'hover:bg-blue-700');
+                    }
+                } catch (error) {
+                    if (error.name !== 'AbortError') {
+                        XLSX.writeFile(wb, filename);
+                        showToast('環境限制，已自動改用一般下載', 'success');
+                    }
+                    return; 
+                }
+            }
+
+            try {
+                const companyDirHandle = await excelExportDirHandle.getDirectoryHandle(safeCompanyName, { create: true });
+                const dateDirHandle = await companyDirHandle.getDirectoryHandle(dateString, { create: true });
+                const excelData = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+                const fileHandle = await dateDirHandle.getFileHandle(filename, { create: true });
+                const writable = await fileHandle.createWritable();
+                await writable.write(excelData);
+                await writable.close();
+                showToast(`報表已存入：${safeCompanyName}/${dateString}/`, 'success');
+            } catch (error) {
+                console.error(error);
+                XLSX.writeFile(wb, filename);
+                showToast('寫入失敗，已自動改用一般下載', 'info');
+            }
+        };
+
+        window.editReport = (id) => {
+            const report = reports.find(r => r.id === id);
+            if (!report) return;
+            editingId = id;
+            document.getElementById('formTitle').innerHTML = '<i class="fa-solid fa-pen-to-square mr-2"></i>修改回報紀錄';
+            document.getElementById('submitBtn').innerHTML = '<i class="fa-solid fa-save"></i> 儲存修改';
+            document.getElementById('cancelEditBtn').classList.remove('hidden');
+
+            document.getElementById('f_time').value = report.time;
+            document.getElementById('f_company').value = report.company;
+            document.getElementById('f_task_content').value = report.taskContent || '';
+            document.getElementById('f_desc').value = report.desc;
+            document.getElementById('f_impact').value = report.impact;
+            document.getElementById('f_cause').value = report.cause;
+            document.getElementById('f_handler').value = report.handler || '待指定';
+            document.getElementById('f_action_type').value = report.actionType;
+            document.getElementById('f_action_desc').value = report.actionDesc;
+            document.getElementById('f_progress').value = report.progress || '';
+            document.getElementById('f_improvement').value = report.improvement || '';
+            document.getElementById('f_notes').value = report.notes || '';
+            document.getElementById('f_status_reason').value = ''; 
+            
+            const radioStatus = document.querySelector(`input[name="f_status"][value="${report.status}"]`);
+            if(radioStatus) radioStatus.checked = true;
+
+            document.getElementById('f_remind_toggle').checked = report.reminderEnabled || false;
+            window.toggleReportReminderFields(report.reminderEnabled);
+            if(report.reminderEnabled) {
+                document.getElementById('f_appoint_time').value = report.appointmentDate || '';
+                document.getElementById('f_remind_offset').value = report.reminderOffset || '0';
+                window.toggleReportCustomTime(report.reminderOffset);
+                if(report.reminderOffset === 'custom') document.getElementById('f_custom_time').value = report.customReminderDate || '';
+                document.getElementById('f_remind_msg').value = report.reminderMsg || '';
+                document.getElementById('f_remind_sound').value = report.reminderSound || 'beep';
+            }
+
+            currentAttachedFiles = []; 
+            const display = document.getElementById('fileListDisplay');
+            const container = document.getElementById('fileListContainer');
+            if(container) container.innerHTML = '';
+
+            if (report.attachments && report.attachments.length > 0) {
+                display.textContent = `原已有 ${report.attachments.length} 個檔案 (重新選擇將覆蓋舊檔)`;
+                display.classList.add('text-indigo-600', 'font-medium');
+                
+                if(container) {
+                    report.attachments.forEach(f => {
+                        const nameParts = f.name.split('.');
+                        const ext = nameParts.length > 1 ? nameParts.pop().toUpperCase() : '';
+                        const name = nameParts.join('.');
+                        const extDisplay = ext ? `.${ext}` : '未知';
+                        
+                        container.innerHTML += `
+                            <div class="flex items-center justify-between p-2 text-sm bg-indigo-50/50 border border-indigo-100 shadow-sm rounded-md mt-2">
+                                <div class="flex items-center gap-2 overflow-hidden">
+                                    <i class="fa-solid fa-file-arrow-up text-indigo-400 shrink-0"></i>
+                                    <span class="truncate text-indigo-700 font-medium" title="${f.name}">${name} <span class="text-xs font-normal opacity-75">(既有檔案)</span></span>
+                                </div>
+                                <span class="text-xs text-indigo-500 bg-indigo-100 border border-indigo-200 px-2 py-0.5 rounded font-mono shrink-0">${extDisplay}</span>
+                            </div>
+                        `;
+                    });
+                }
+            } else {
+                display.textContent = '尚未選擇檔案';
+                display.classList.remove('text-indigo-600', 'font-medium');
+            }
+
+            window.renderList(); 
+        };
+
+        window.cancelEdit = () => {
+            editingId = null;
+            document.getElementById('issueForm').reset();
+            document.getElementById('formTitle').innerHTML = '<i class="fa-solid fa-pen-to-square mr-2"></i>新增回報紀錄';
+            document.getElementById('submitBtn').innerHTML = '<i class="fa-solid fa-plus"></i> 新增紀錄';
+            document.getElementById('cancelEditBtn').classList.add('hidden');
+            document.getElementById('f_status_reason').value = ''; 
+            
+            document.getElementById('f_remind_toggle').checked = false;
+            window.toggleReportReminderFields(false);
+            
+            currentAttachedFiles = [];
+            window.renderAttachedFiles();
+
+            const now = new Date(); now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
+            document.getElementById('f_time').value = now.toISOString().slice(0, 16);
+            window.renderList();
+        };
+
+        function getMonthKey(date) { return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`; }
+        function getDayKey(date) { return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`; }
+
+        window.renderCalendarStrip = () => {
+            const container = document.getElementById('calendarDays');
+            if (!container) return;
+            container.innerHTML = '';
+            const daysOfWeek = ['日', '一', '二', '三', '四', '五', '六'];
+            const todayStr = getDayKey(new Date());
+            
+            for(let i=0; i<7; i++) {
+                let d = new Date(displayWeekStart);
+                d.setDate(d.getDate() + i);
+                let dateStr = getDayKey(d);
+                
+                let isSelected = (dateStr === activeFilterDate);
+                let isToday = (dateStr === todayStr);
+                let hasReports = reports.some(r => r.time.startsWith(dateStr));
+
+                let bgClass = isSelected ? "bg-indigo-600 text-white shadow-md ring-2 ring-indigo-200" : "bg-white text-slate-600 hover:bg-indigo-50 hover:border-indigo-200 border border-slate-200";
+                let textClass = isSelected ? "text-white" : (isToday ? "text-indigo-700" : "text-slate-400");
+                let dotHtml = hasReports ? `<span class="absolute top-1 right-1.5 w-2 h-2 rounded-full ${isSelected ? 'bg-white' : 'bg-red-500'} ring-1 ring-white"></span>` : '';
+
+                container.innerHTML += `
+                    <div onclick="window.setDateFilter('${dateStr}')" class="relative cursor-pointer flex flex-col items-center justify-center w-11 sm:w-14 h-12 sm:h-[52px] rounded-lg transition-all ${bgClass} shrink-0 group">
+                        <span class="text-[11px] font-medium mb-0.5 ${textClass}">${daysOfWeek[d.getDay()]}</span>
+                        <span class="text-sm sm:text-[17px] font-bold leading-none ${isToday && !isSelected ? 'text-indigo-600' : ''}">${d.getDate()}</span>
+                        ${dotHtml}
+                    </div>
+                `;
+            }
+        };
+
+        window.changeWeek = (offset) => {
+            displayWeekStart.setDate(displayWeekStart.getDate() + (offset * 7));
+            const filter = document.getElementById('monthFilter');
+            const monthKey = getMonthKey(displayWeekStart);
+            if([...filter.options].some(opt => opt.value === monthKey)) filter.value = monthKey;
+            activeFilterDate = null;
+            window.renderCalendarStrip(); window.renderList();
+        };
+
+        window.setDateFilter = (dateStr) => {
+            activeFilterDate = (activeFilterDate === dateStr) ? null : dateStr;
+            if (activeFilterDate) {
+                const [y, m] = dateStr.split('-');
+                const filter = document.getElementById('monthFilter');
+                if([...filter.options].some(opt => opt.value === `${y}-${m}`)) filter.value = `${y}-${m}`;
+            }
+            window.renderCalendarStrip(); window.renderList();
+        };
+
+        window.resetToToday = () => {
+            let today = new Date();
+            displayWeekStart = new Date(today);
+            displayWeekStart.setDate(displayWeekStart.getDate() - displayWeekStart.getDay());
+            activeFilterDate = getDayKey(today);
+            const filter = document.getElementById('monthFilter');
+            if([...filter.options].some(opt => opt.value === getMonthKey(today))) filter.value = getMonthKey(today);
+            window.renderCalendarStrip(); window.renderList();
+        };
+
+        function updateMonthFilter() {
+            const filter = document.getElementById('monthFilter');
+            const currentValue = filter.value;
+            const months = new Set();
+            reports.forEach(r => months.add(getMonthKey(new Date(r.time))));
+            months.add(getMonthKey(new Date()));
+            const sorted = Array.from(months).sort().reverse();
+            filter.innerHTML = '';
+            sorted.forEach(m => {
+                filter.innerHTML += `<option value="${m}">${m.replace('-','年 ')}月</option>`;
+            });
+            if (currentValue && sorted.includes(currentValue)) filter.value = currentValue;
+        }
+
+        window.setTimeViewMode = (mode) => {
+            timeViewMode = mode;
+            document.querySelectorAll('.view-mode-btn').forEach(btn => {
+                btn.classList.remove('bg-white', 'text-indigo-600', 'shadow-sm');
+                btn.classList.add('text-slate-500');
+            });
+            let activeBtn = mode === 'all' ? 'btnViewAll' : (mode === 'month' ? 'btnViewMonth' : 'btnViewWeek');
+            document.getElementById(activeBtn).classList.remove('text-slate-500');
+            document.getElementById(activeBtn).classList.add('bg-white', 'text-indigo-600', 'shadow-sm');
+            
+            const mFilter = document.getElementById('monthFilterContainer');
+            if(mode === 'month') { mFilter.classList.remove('hidden'); mFilter.classList.add('flex'); }
+            else { mFilter.classList.add('hidden'); mFilter.classList.remove('flex'); }
+
+            activeFilterDate = null;
+            window.renderCalendarStrip(); window.renderList();
+        };
+
+        window.setStatusFilter = (status) => {
+            currentStatusFilter = status;
+            document.querySelectorAll('.status-tab').forEach(tab => {
+                if (tab.dataset.status === status) {
+                    tab.classList.remove('bg-slate-100', 'text-slate-600'); tab.classList.add('bg-slate-800', 'text-white');
+                } else {
+                    tab.classList.remove('bg-slate-800', 'text-white'); tab.classList.add('bg-slate-100', 'text-slate-600');
+                }
+            });
+            window.renderList();
+        };
+
+        window.renderList = () => {
+            const container = document.getElementById('listContainer');
+            const selMonth = document.getElementById('monthFilter').value;
+            
+            let filtered = reports.filter(r => {
+                if (activeFilterDate) return r.time.startsWith(activeFilterDate);
+                if (timeViewMode === 'all') return true;
+                if (timeViewMode === 'month') return getMonthKey(new Date(r.time)) === selMonth;
+                if (timeViewMode === 'week') {
+                    const rTime = new Date(r.time).getTime();
+                    const wStart = new Date(displayWeekStart); wStart.setHours(0,0,0,0);
+                    const wEnd = new Date(wStart); wEnd.setDate(wEnd.getDate() + 6); wEnd.setHours(23,59,59,999);
+                    return rTime >= wStart.getTime() && rTime <= wEnd.getTime();
+                }
+                return true;
+            });
+
+            let todo = 0, doing = 0, pending = 0, done = 0, newUnset = 0, newSetting = 0, rdIssue = 0;
+            filtered.forEach(r => {
+                if(r.status==='未處理') todo++; 
+                else if(r.status==='處理中') doing++; 
+                else if(r.status==='待後續處理') pending++; 
+                else if(r.status==='已完成') done++;
+                else if(r.status==='新訂單客戶未設定') newUnset++;
+                else if(r.status==='新訂單客戶設定中') newSetting++;
+                else if(r.status==='RD回報ISUU紀錄') rdIssue++;
+            });
+            
+            if(document.getElementById('stat-todo')) document.getElementById('stat-todo').textContent = todo;
+            if(document.getElementById('stat-doing')) document.getElementById('stat-doing').textContent = doing;
+            if(document.getElementById('stat-pending')) document.getElementById('stat-pending').textContent = pending;
+            if(document.getElementById('stat-done')) document.getElementById('stat-done').textContent = done;
+            if(document.getElementById('stat-new-unset')) document.getElementById('stat-new-unset').textContent = newUnset;
+            if(document.getElementById('stat-new-setting')) document.getElementById('stat-new-setting').textContent = newSetting;
+            if(document.getElementById('stat-rd-issue')) document.getElementById('stat-rd-issue').textContent = rdIssue;
+
+            if (currentStatusFilter !== '全部') filtered = filtered.filter(r => r.status === currentStatusFilter);
+            
+            container.innerHTML = '';
+            
+            if (filtered.length === 0) {
+                container.innerHTML = `<div class="text-center py-16 text-slate-400"><i class="fa-solid fa-box-open text-5xl mb-4 opacity-50"></i><p class="text-lg">無資料</p></div>`;
+            } else {
+                filtered.forEach(r => {
+                    const fDate = new Date(r.time).toLocaleDateString('zh-TW', { year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit' });
+                    const card = document.createElement('div');
+                    card.className = 'bg-white p-4 rounded-lg border border-slate-200 shadow-sm hover:shadow-md transition-shadow relative';
+                    if (editingId === r.id) card.classList.add('ring-2', 'ring-indigo-500', 'border-indigo-500');
+                    
+                    let sColor = 'text-slate-600';
+                    if(r.status==='未處理') sColor='text-red-600'; 
+                    else if(r.status==='處理中') sColor='text-yellow-600'; 
+                    else if(r.status==='待後續處理') sColor='text-purple-600'; 
+                    else if(r.status==='已完成') sColor='text-green-600';
+                    else if(r.status==='新訂單客戶未設定') sColor='text-cyan-600';
+                    else if(r.status==='新訂單客戶設定中') sColor='text-blue-600';
+                    else if(r.status==='RD回報ISUU紀錄') sColor='text-orange-600';
+
+                    let hColor = 'text-slate-600 bg-slate-100 border-slate-200';
+                    if(r.handler==='FAE') hColor='text-blue-700 bg-blue-50 border-blue-200'; 
+                    else if(r.handler==='RD') hColor='text-fuchsia-700 bg-fuchsia-50 border-fuchsia-200'; 
+                    else if(r.handler==='CPM') hColor='text-orange-700 bg-orange-50 border-orange-200'; 
+                    else if(r.handler==='業務') hColor='text-teal-700 bg-teal-50 border-teal-200';
+
+                    let timeBadge = '';
+                    if (r.status === '已完成' && r.completedTime) {
+                        const dur = getDurationStr(r.time, r.completedTime);
+                        const cDate = new Date(r.completedTime).toLocaleString('zh-TW', { year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit' });
+                        timeBadge = `<span class="ml-2 inline-flex items-center gap-1 bg-green-100 text-green-800 px-2 py-0.5 rounded text-[11px] font-bold border border-green-300" title="總計處理耗時"><i class="fa-solid fa-flag-checkered"></i> 完成時間: ${cDate} (耗時: ${dur})</span>`;
+                    }
+
+                    let clientHtml = '', bellHtml = '';
+                    const cData = clientsData.find(c => c.company === r.company);
+                    if (cData) {
+                        if (cData.reminderEnabled && !cData.reminderTriggered && cData.reminderTriggerTime) bellHtml += `<i class="fa-solid fa-bell text-amber-500 ml-1 text-sm animate-pulse" title="已設定客戶約訪提醒"></i>`;
+                        const hc = getStatusColor(cData.hwStatus), sc = getStatusColor(cData.swStatus);
+                        clientHtml = `
+                            <div class="flex flex-wrap items-center gap-2 mt-1.5 text-[10px]">
+                                <span class="px-1.5 py-0.5 rounded border bg-slate-50 text-slate-600 border-slate-200"><i class="fa-solid fa-user-tie text-slate-400"></i> 業務: ${cData.sales||'未指定'}</span>
+                                <span class="px-1.5 py-0.5 rounded border bg-slate-50 text-slate-600 border-slate-200"><i class="fa-solid fa-share-nodes text-slate-400"></i> 來源: ${cData.source||'未提供'}</span>
+                                <div class="flex items-center rounded border border-slate-200 overflow-hidden shadow-sm">
+                                    <span class="px-1.5 py-0.5 bg-slate-50 text-slate-600 border-r border-slate-200"><i class="fa-solid fa-server text-slate-400"></i> 硬體: ${cData.hwExpiry||'未知'}</span>
+                                    <span class="px-1.5 py-0.5 ${hc}">${cData.hwStatus||'未知'}</span>
+                                </div>
+                                <div class="flex items-center rounded border border-slate-200 overflow-hidden shadow-sm">
+                                    <span class="px-1.5 py-0.5 bg-slate-50 text-slate-600 border-r border-slate-200"><i class="fa-solid fa-code text-slate-400"></i> 軟體: ${cData.swExpiry||'未知'}</span>
+                                    <span class="px-1.5 py-0.5 ${sc}">${cData.swStatus||'未知'}</span>
+                                </div>
+                            </div>`;
+                    }
+                    
+                    if (r.reminderEnabled && !r.reminderTriggered && r.reminderTriggerTime) {
+                        bellHtml += `<i class="fa-solid fa-clock text-indigo-500 ml-1.5 text-sm animate-pulse" title="已設定本紀錄追蹤"></i>`;
+                    }
+
+                    let attachmentsHtml = '';
+                    if (r.attachments && r.attachments.length > 0) {
+                        const fileTags = r.attachments.map(f => {
+                            let icon = 'fa-file';
+                            if(f.type && f.type.includes('image')) icon = 'fa-file-image';
+                            else if(f.type && f.type.includes('pdf')) icon = 'fa-file-pdf';
+                            return `<span class="inline-flex items-center gap-1 bg-slate-100 border border-slate-200 text-slate-600 px-2 py-1 rounded text-xs truncate max-w-[200px]" title="${f.name}"><i class="fa-solid ${icon} text-slate-400"></i> ${f.name}</span>`;
+                        }).join('');
+                        attachmentsHtml = `<div class="mt-3 flex flex-wrap gap-2 items-center border-t border-slate-100 pt-3"><span class="text-xs font-semibold text-slate-400">附檔:</span>${fileTags}</div>`;
+                    }
+
+                    let historyHtml = '';
+                    if (r.statusHistory && r.statusHistory.length > 0) {
+                        const historySteps = r.statusHistory.map(h => {
+                            const hDate = new Date(h.timestamp).toLocaleString('zh-TW', {month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit'});
+                            const reasonText = h.reason ? ` <span class="text-indigo-600 font-semibold text-[10px] ml-0.5">(${h.reason})</span>` : '';
+                            return `<span class="inline-block bg-slate-100 rounded px-1.5 py-0.5 border border-slate-200 shadow-sm">${h.status}${reasonText} <span class="opacity-60 text-[10px] ml-1 tracking-tighter">${hDate}</span></span>`;
+                        }).join(' <i class="fa-solid fa-arrow-right text-[10px] text-slate-300 mx-0.5"></i> ');
+                        historyHtml = `<div class="mt-4 pt-3 border-t border-slate-100 text-xs text-slate-500 flex flex-wrap items-center gap-1.5 leading-relaxed"><i class="fa-solid fa-clock-rotate-left text-slate-400"></i> <span class="font-medium text-slate-500">狀態歷程：</span>${historySteps}</div>`;
+                    }
+
+                    card.innerHTML = `
+                        <div class="flex flex-wrap justify-between items-start mb-3 gap-2 border-b border-slate-100 pb-2">
+                            <div class="flex flex-col gap-1 w-full sm:w-auto flex-1">
+                                <div class="flex items-center gap-2">
+                                    <span class="font-bold text-indigo-700 text-lg leading-tight">${r.company} ${bellHtml}</span>
+                                    <select onchange="window.changeHandler(this, '${r.id}')" class="text-[10px] font-bold border rounded px-1.5 py-0.5 appearance-none cursor-pointer focus:outline-none ${hColor} h-5 shadow-sm">
+                                        <option value="待指定" ${r.handler==='待指定'||!r.handler?'selected':''}>待指定</option>
+                                        <option value="FAE" ${r.handler==='FAE'?'selected':''}>FAE</option>
+                                        <option value="RD" ${r.handler==='RD'?'selected':''}>RD</option>
+                                        <option value="CPM" ${r.handler==='CPM'?'selected':''}>CPM</option>
+                                        <option value="業務" ${r.handler==='業務'?'selected':''}>業務</option>
+                                    </select>
+                                </div>
+                                <span class="text-xs font-mono text-slate-500 flex items-center gap-1">
+                                    <i class="fa-regular fa-clock"></i> 開始: ${fDate} ${timeBadge}
+                                </span>
+                                ${clientHtml}
+                            </div>
+                            <div class="flex items-center gap-1 bg-slate-50 rounded-lg border border-slate-200 p-1">
+                                <select onchange="window.changeStatus(this, '${r.id}')" class="text-xs font-bold border-none bg-transparent py-1 pl-2 pr-6 appearance-none cursor-pointer focus:ring-0 ${sColor}">
+                                    <option value="未處理" ${r.status==='未處理'?'selected':''}>未處理</option>
+                                    <option value="處理中" ${r.status==='處理中'?'selected':''}>處理中</option>
+                                    <option value="待後續處理" ${r.status==='待後續處理'?'selected':''}>待後續處理</option>
+                                    <option value="已完成" ${r.status==='已完成'?'selected':''}>已完成</option>
+                                    <option value="新訂單客戶未設定" ${r.status==='新訂單客戶未設定'?'selected':''}>未設定</option>
+                                    <option value="新訂單客戶設定中" ${r.status==='新訂單客戶設定中'?'selected':''}>設定中</option>
+                                    <option value="RD回報ISUU紀錄" ${r.status==='RD回報ISUU紀錄'?'selected':''}>RD回報ISUU紀錄</option>
+                                </select>
+                                <div class="h-5 w-px bg-slate-300 mx-1"></div>
+                                <button onclick="window.exportSingleReport('${r.id}')" class="text-slate-500 hover:text-emerald-600 p-1.5" title="依照公司與日期建立資料夾並匯出單筆報表"><i class="fa-solid fa-file-excel"></i></button>
+                                <button onclick="window.editReport('${r.id}')" class="text-slate-500 hover:text-indigo-600 p-1.5"><i class="fa-solid fa-pen"></i></button>
+                                <button onclick="window.confirmDelete('${r.id}')" class="text-slate-500 hover:text-red-600 p-1.5"><i class="fa-solid fa-trash-can"></i></button>
+                            </div>
+                        </div>
+                        <div class="mb-3">
+                            <h3 class="font-semibold text-slate-800 text-[15px]">${r.desc}</h3>
+                            <p class="text-sm text-slate-600 mt-1.5"><i class="fa-solid fa-briefcase text-indigo-500 w-4"></i> 工作內容: ${r.taskContent || '未填寫'}</p>
+                            <p class="text-sm text-slate-600 mt-1.5"><i class="fa-solid fa-triangle-exclamation text-amber-500 w-4"></i> 影響: ${r.impact}</p>
+                            <p class="text-sm text-slate-600 mt-1"><i class="fa-solid fa-magnifying-glass text-blue-500 w-4"></i> 原因: ${r.cause}</p>
+                        </div>
+                        <div class="bg-slate-50/80 p-3 rounded-md text-sm border border-slate-100 mb-2">
+                            <div class="font-semibold text-slate-700 mb-1"><span class="bg-indigo-100 text-indigo-800 text-[10px] px-1.5 py-0.5 rounded mr-1">類型 ${r.actionType}</span>當下處置</div>
+                            <p class="text-slate-600">${r.actionDesc}</p>
+                        </div>
+                        ${r.progress ? `<div class="text-sm text-slate-600 border-l-2 border-blue-400 pl-2 mt-3 bg-blue-50/30 py-1.5"><strong>目前進度：</strong>${r.progress}</div>` : ''}
+                        ${r.improvement ? `<div class="text-sm text-slate-600 border-l-2 border-emerald-400 pl-2 mt-2 bg-emerald-50/30 py-1.5"><strong>改善方向：</strong>${r.improvement}</div>` : ''}
+                        ${r.notes ? `<div class="text-xs text-slate-500 mt-3 bg-yellow-50/50 p-2 rounded border border-yellow-100/50"><i class="fa-regular fa-comment-dots text-yellow-600 mr-1"></i> ${r.notes}</div>` : ''}
+                        ${attachmentsHtml}
+                        ${historyHtml}
+                    `;
+                    container.appendChild(card);
+                });
+            }
+        };
+
+        async function handleSmartExport() {
+            const m = document.getElementById('monthFilter').value;
+            const filtered = reports.filter(r => getMonthKey(new Date(r.time)) === m);
+            if (filtered.length === 0) return showToast('沒有資料可匯出', 'error');
+
+            const wsData = filtered.map(r => {
+                let duration = '', endT = '';
+                if(r.status === '已完成' && r.completedTime) {
+                    endT = new Date(r.completedTime).toLocaleString('zh-TW', {hour12: false});
+                    duration = getDurationStr(r.time, r.completedTime);
+                }
+                
+                const cData = clientsData.find(c => c.company === r.company) || {};
+                
+                return {
+                    '開始時間': new Date(r.time).toLocaleString('zh-TW', {hour12: false}),
+                    '結束時間': endT,
+                    '總處理耗時': duration,
+                    '公司/客戶': r.company,
+                    '工作內容': r.taskContent || '',
+                    '處理人員': r.handler || '待指定',
+                    '狀態': r.status,
+                    '業務人員': cData.sales || '',
+                    '來源': cData.source || '',
+                    '硬體保固到期': cData.hwExpiry || '',
+                    '硬體狀態': cData.hwStatus || '',
+                    '軟體維運到期': cData.swExpiry || '',
+                    '軟體狀態': cData.swStatus || '',
+                    '問題描述': r.desc,
+                    '影響範圍': r.impact,
+                    '原因': r.cause,
+                    '處置類型': r.actionType,
+                    '當下處置': r.actionDesc,
+                    '目前進度': r.progress || '',
+                    '後續改善': r.improvement || '',
+                    '狀態歷程': (r.statusHistory || []).map(h => {
+                        const hDate = new Date(h.timestamp).toLocaleString('zh-TW', {month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit'});
+                        const reasonStr = h.reason ? `[${h.reason}]` : '';
+                        return `${h.status}${reasonStr}(${hDate})`;
+                    }).join(' -> ')
+                };
+            });
+            const ws = XLSX.utils.json_to_sheet(wsData);
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, "月報表");
+            const filename = `FAE月報_${m}.xlsx`;
+
+            if (!window.showDirectoryPicker) {
+                XLSX.writeFile(wb, filename);
+                return showToast('報表匯出成功', 'success');
+            }
+
+            if (excelExportDirHandle) {
+                const hasPerm = await verifyPermission(excelExportDirHandle, true);
+                if (!hasPerm) excelExportDirHandle = null; 
+            }
+
+            if (!excelExportDirHandle) {
+                try {
+                    excelExportDirHandle = await window.showDirectoryPicker({ mode: 'readwrite' });
+                    await saveHandleToDB('exportDir', excelExportDirHandle); 
+                    const btn = document.getElementById('setSaveDirBtn');
+                    if(btn) {
+                        btn.innerHTML = `<i class="fa-solid fa-folder-check"></i> 報表路徑已設`;
+                        btn.classList.remove('bg-amber-500', 'hover:bg-amber-600');
+                        btn.classList.add('bg-blue-600', 'hover:bg-blue-700');
+                    }
+                    showToast(`已記憶報表匯出路徑：${excelExportDirHandle.name}`, 'info');
+                } catch (error) {
+                    if (error.name !== 'AbortError') {
+                        // 遇到權限阻擋時，自動降級為一般下載
+                        XLSX.writeFile(wb, filename);
+                        showToast('環境限制，已自動改用一般下載', 'success');
+                    }
+                    return; 
+                }
+            }
+
+            try {
+                const excelData = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+                const fileHandle = await excelExportDirHandle.getFileHandle(filename, { create: true });
+                const writable = await fileHandle.createWritable();
+                await writable.write(excelData);
+                await writable.close();
+                showToast(`報表已成功匯出至：${excelExportDirHandle.name} 資料夾`, 'success');
+            } catch (error) {
+                console.error(error);
+                XLSX.writeFile(wb, filename);
+                showToast('寫入失敗，已自動改用一般下載', 'info');
+            }
+        }
+
+        window.handleChangeExportPath = async () => {
+            try {
+                excelExportDirHandle = await window.showDirectoryPicker({ mode: 'readwrite' });
+                await saveHandleToDB('exportDir', excelExportDirHandle); 
+                
+                const btn = document.getElementById('setSaveDirBtn');
+                if(btn) {
+                    btn.innerHTML = `<i class="fa-solid fa-folder-check"></i> 報表路徑已設`;
+                    btn.classList.remove('bg-amber-500', 'hover:bg-amber-600');
+                    btn.classList.add('bg-blue-600', 'hover:bg-blue-700');
+                }
+                
+                showToast(`報表匯出路徑已更新為：${excelExportDirHandle.name}`, 'success');
+            } catch(error) {
+                if (error.name === 'SecurityError') {
+                    showToast('系統限制：目前預覽環境無法使用本機資料夾選取功能', 'error');
+                } else if (error.name !== 'AbortError') {
+                    showToast('修改存檔目錄失敗', 'error');
+                }
+            }
+        };
+
+        function showToast(message, type = 'info') {
+            const container = document.getElementById('toastContainer');
+            const toast = document.createElement('div');
+            let bg = type === 'success' ? 'bg-slate-800' : (type === 'error' ? 'bg-red-600' : 'bg-slate-800');
+            let icon = type === 'success' ? '<i class="fa-solid fa-circle-check text-green-400"></i>' : (type === 'error' ? '<i class="fa-solid fa-circle-exclamation text-white"></i>' : '<i class="fa-solid fa-circle-info text-blue-400"></i>');
+            toast.className = `${bg} text-white px-4 py-3 rounded shadow-lg flex items-center gap-3 toast-enter text-sm font-medium z-[100]`;
+            toast.innerHTML = `${icon} <span>${message}</span>`;
+            container.appendChild(toast);
+            setTimeout(() => {
+                toast.classList.replace('toast-enter', 'toast-exit');
+                setTimeout(() => { if (container.contains(toast)) container.removeChild(toast); }, 300);
+            }, 3000);
+        }
+
+        const generateMockData = () => {
+            const today = new Date();
+            const lastWeek = new Date(today); lastWeek.setDate(today.getDate() - 5);
+            return [
+                {
+                    id: 'rep-1', time: today.toISOString().slice(0, 16), company: '台灣耐落股份有限公司', taskContent: '協助客戶新增連線設備', desc: '舊客戶新增設備', impact: '台灣耐落EMS追加案出貨', cause: '客戶未加購', handler: 'FAE', actionType: 'A', actionDesc: '已更新訂單', progress: '採購待確認發包中', improvement: '', status: '處理中', timestamp: today.getTime(), statusHistory: [{status: '未處理', timestamp: today.getTime() - 86400000, reason: '新建紀錄'}, {status: '處理中', timestamp: today.getTime(), reason: '已派工處理'}]
+                },
+                {
+                    id: 'rep-2', time: lastWeek.toISOString().slice(0, 16), company: '範例客戶', taskContent: '系統出貨前測試', desc: '出貨前內部檢核', impact: '系統上線前檢查', cause: '常規出貨', handler: 'CPM', actionType: 'A', actionDesc: '全系統測試正常', progress: '已抵達廠區準備交機', improvement: '通過', status: '新訂單客戶設定中', timestamp: lastWeek.getTime(), statusHistory: [{status: '新訂單客戶未設定', timestamp: lastWeek.getTime() - 86400000, reason: '新建紀錄'}, {status: '新訂單客戶設定中', timestamp: lastWeek.getTime(), reason: '抵達現場安裝'}]
+                }
+            ];
+        };
+    </script>
+</body>
+</html>
+```eof
