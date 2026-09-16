@@ -1,0 +1,737 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>智能語音全方位解析與企劃重構系統</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=Noto+Sans+TC:wght@400;500;700&display=swap" rel="stylesheet">
+    
+    <style>
+        body {
+            font-family: 'Inter', 'Noto Sans TC', sans-serif;
+            background-color: #0f172a;
+            color: #f8fafc;
+        }
+        
+        ::-webkit-scrollbar { width: 8px; height: 8px; }
+        ::-webkit-scrollbar-track { background: #1e293b; }
+        ::-webkit-scrollbar-thumb { background: #475569; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #64748b; }
+        
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+        .markdown-body h1 { font-size: 1.5rem; font-weight: bold; margin-top: 1.5rem; margin-bottom: 1rem; color: #60a5fa; border-bottom: 1px solid #334155; padding-bottom: 0.5rem; }
+        .markdown-body h2 { font-size: 1.25rem; font-weight: bold; margin-top: 1.25rem; margin-bottom: 0.75rem; color: #93c5fd; }
+        .markdown-body h3 { font-size: 1.1rem; font-weight: bold; margin-top: 1rem; margin-bottom: 0.5rem; color: #bfdbfe; }
+        .markdown-body p { margin-bottom: 1rem; line-height: 1.7; color: #cbd5e1; }
+        .markdown-body ul { list-style-type: disc; padding-left: 1.5rem; margin-bottom: 1rem; color: #cbd5e1; }
+        .markdown-body ol { list-style-type: decimal; padding-left: 1.5rem; margin-bottom: 1rem; color: #cbd5e1; }
+        .markdown-body li { margin-bottom: 0.25rem; }
+        .markdown-body blockquote { border-left: 4px solid #3b82f6; padding-left: 1rem; color: #94a3b8; font-style: italic; background: #1e293b; padding: 0.5rem 1rem; border-radius: 0 0.5rem 0.5rem 0; }
+        .markdown-body strong { color: #f8fafc; font-weight: bold; }
+        .markdown-body code { background: #334155; padding: 0.2rem 0.4rem; border-radius: 0.25rem; font-family: monospace; font-size: 0.9em; }
+
+        .pulse-border { animation: pulse-border-anim 2s cubic-bezier(0.4, 0, 0.6, 1) infinite; }
+        @keyframes pulse-border-anim {
+            0%, 100% { border-color: rgba(59, 130, 246, 0.5); box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.4); }
+            50% { border-color: rgba(59, 130, 246, 1); box-shadow: 0 0 0 10px rgba(59, 130, 246, 0); }
+        }
+
+        @keyframes flash-glow {
+            0%, 100% { border-color: rgba(16, 185, 129, 0.4); box-shadow: 0 0 15px rgba(16, 185, 129, 0.2), inset 0 0 10px rgba(16, 185, 129, 0.1); }
+            50% { border-color: rgba(16, 185, 129, 1); box-shadow: 0 0 40px rgba(16, 185, 129, 0.8), inset 0 0 20px rgba(16, 185, 129, 0.4); }
+        }
+        .flash-glow { animation: flash-glow 1.5s ease-in-out infinite; }
+
+        .interim-text { color: #94a3b8; }
+        .final-text { color: #f1f5f9; }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col items-center p-4 sm:p-8">
+
+    <main class="w-full max-w-6xl bg-slate-800 rounded-3xl shadow-2xl overflow-hidden border border-slate-700 flex flex-col mb-8 min-h-[85vh]">
+        
+        <header class="p-6 border-b border-slate-700 bg-slate-800/80 backdrop-blur-md relative overflow-hidden flex flex-col md:flex-row justify-between items-start md:items-center gap-4 z-20">
+            <div class="absolute inset-0 opacity-10 bg-[url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI4IiBoZWlnaHQ9IjgiPgo8cmVjdCB3aWR0aD0iOCIgaGVpZ2h0PSI4IiBmaWxsPSIjZmZmIiBmaWxsLW9wYWNpdHk9IjAuMSIvPgo8cGF0aCBkPSJNMCAwbDh2OFoiIGZpbGw9IiNmZmYiIGZpbGwtb3BhY2l0eT0iMC4yIi8+Cjwvc3ZnPg==')] pointer-events-none"></div>
+            <div class="relative z-10">
+                <h1 class="text-2xl font-bold text-white flex items-center gap-3">
+                    <span class="text-3xl">🧠</span> 語音全方位解析與企劃重構
+                </h1>
+                <p class="text-slate-400 text-sm mt-2">支援麥克風即時錄音與資料夾批次解析，產出部落格、速查表與社群摘要。</p>
+            </div>
+            
+            <div class="relative z-10 flex w-full md:w-auto flex-wrap sm:flex-nowrap items-center gap-2 mt-4 md:mt-0">
+                <input type="password" id="api-key-input" placeholder="Google Gemini API Key" class="w-full sm:w-auto md:w-64 bg-slate-900 border border-slate-600 rounded-lg px-4 py-2 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500 transition text-sm">
+                <button id="save-key-btn" class="bg-slate-600 hover:bg-slate-500 text-white px-4 py-2 rounded-lg font-medium transition whitespace-nowrap text-sm shadow-lg">儲存</button>
+                <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener noreferrer" class="text-blue-400 hover:text-blue-300 text-sm ml-1 transition whitespace-nowrap flex items-center gap-1 underline underline-offset-4 decoration-blue-500/50 hover:decoration-blue-300">
+                    申請金鑰
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" /></svg>
+                </a>
+            </div>
+        </header>
+
+        <div class="flex border-b border-slate-700 bg-slate-900/50 px-6 pt-4 gap-2 overflow-x-auto no-scrollbar z-10">
+            <button id="tab-btn-mic" class="px-6 py-3 rounded-t-xl font-bold transition-colors bg-slate-800 text-blue-400 border-t border-l border-r border-slate-700 flex items-center gap-2 whitespace-nowrap">
+                🎙️ 麥克風即時錄製與重構
+            </button>
+            <button id="tab-btn-batch" class="px-6 py-3 rounded-t-xl font-bold transition-colors bg-transparent text-slate-400 hover:text-white hover:bg-slate-800/50 flex items-center gap-2 whitespace-nowrap">
+                📁 資料夾批次音檔處理
+            </button>
+        </div>
+
+        <div id="mode-mic" class="flex flex-col flex-1">
+            <div class="relative w-full h-48 sm:h-56 bg-slate-950 border-b border-slate-700 shrink-0 overflow-hidden">
+                <div id="mic-active-status" class="absolute top-4 left-4 right-4 flex justify-between items-center z-10 opacity-0 transition-opacity duration-300">
+                    <div class="flex items-center gap-2 bg-slate-900/80 px-3 py-1.5 rounded-full border border-slate-700 shadow-lg shadow-red-500/20 backdrop-blur-md">
+                        <div class="w-3 h-3 bg-red-500 rounded-full animate-pulse shadow-[0_0_8px_rgba(239,68,68,0.8)]"></div>
+                        <span class="text-red-400 font-bold text-sm tracking-widest">REC</span>
+                    </div>
+                    <div id="mic-timer" class="text-slate-200 font-mono font-medium bg-slate-900/80 px-4 py-1.5 rounded-full border border-slate-700 shadow-lg backdrop-blur-md">00:00</div>
+                </div>
+
+                <canvas id="visualizer-canvas" class="w-full h-full block relative z-0"></canvas>
+                <div id="mic-status-overlay" class="absolute inset-0 flex flex-col items-center justify-center bg-slate-900/80 transition-opacity duration-500 z-10">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-16 w-16 text-slate-500 mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" /></svg>
+                    <p class="text-slate-400 font-medium">點擊下方「開始錄音」啟用麥克風</p>
+                </div>
+            </div>
+
+            <div class="bg-slate-800 px-6 py-4 border-b border-slate-700 flex flex-wrap justify-between items-center gap-4 shrink-0 shadow-sm z-10">
+                <div class="flex flex-wrap items-center gap-3">
+                    <button id="mic-start-btn" class="flex items-center gap-2 bg-blue-600 hover:bg-blue-500 text-white px-5 py-2.5 rounded-full font-semibold transition-all shadow-lg shadow-blue-500/30">
+                        ▶️ 開始錄音
+                    </button>
+                    <button id="mic-stop-btn" class="hidden flex items-center gap-2 bg-red-500 hover:bg-red-400 text-white px-5 py-2.5 rounded-full font-semibold transition-all shadow-lg shadow-red-500/30 pulse-border">
+                        ⏹️ 停止錄音
+                    </button>
+                    <button id="mic-clear-btn" class="flex items-center gap-2 bg-slate-700 hover:bg-slate-600 text-slate-300 px-4 py-2.5 rounded-full font-medium transition-all">
+                        🗑️ 清除
+                    </button>
+                </div>
+                
+                <div class="flex items-center gap-3">
+                    <button id="mic-ai-process-btn" class="hidden flex items-center gap-2 bg-amber-500 hover:bg-amber-400 text-white px-5 py-2.5 rounded-full font-bold transition-all shadow-lg shadow-amber-500/30 pulse-border">
+                        🧠 執行 AI 深度重構
+                    </button>
+                    <button id="mic-export-btn" class="hidden flex items-center gap-2 bg-purple-600 hover:bg-purple-500 text-white px-4 py-2.5 rounded-full font-semibold transition-all shadow-lg shadow-purple-500/30" onclick="exportMicResult()">
+                        📤 匯出成果
+                    </button>
+                </div>
+            </div>
+
+            <div class="flex-1 p-6 overflow-y-auto bg-slate-900 min-h-[300px]" id="mic-output-container">
+                <h3 class="text-sm font-bold text-slate-500 mb-4 tracking-widest uppercase">即時轉錄內容 (絕不省略)</h3>
+                <div id="mic-transcript-list" class="flex flex-col gap-3 text-lg leading-relaxed">
+                    <div class="text-slate-600 text-center py-10 italic" id="mic-empty-state">尚無錄音資料...</div>
+                </div>
+            </div>
+        </div>
+
+        <div id="mode-batch" class="hidden flex-col flex-1">
+            <div class="p-6 sm:p-8 bg-slate-800 flex flex-col gap-6 shrink-0">
+                <div class="flex-1 w-full flex flex-col items-center justify-center border-2 border-dashed border-slate-500 rounded-2xl p-10 hover:border-blue-400 hover:bg-slate-800/50 transition cursor-pointer group pulse-border" onclick="document.getElementById('folder-input').click()">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-14 w-14 text-slate-400 group-hover:text-blue-400 mb-4 transition" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M5 19a2 2 0 01-2-2V7a2 2 0 012-2h4l2 2h4a2 2 0 012 2v1M5 19h14a2 2 0 002-2v-5a2 2 0 00-2-2H9a2 2 0 00-2 2v5a2 2 0 01-2 2z" /></svg>
+                    <h3 class="text-xl font-bold text-white mb-2">選擇包含音檔的資料夾</h3>
+                    <p class="text-sm text-slate-400 text-center">系統將自動抓取 .mp3, .wav, .m4a 進行批次解析</p>
+                    <input type="file" id="folder-input" webkitdirectory directory multiple class="hidden" accept="audio/*">
+                </div>
+                
+                <div id="batch-summary" class="hidden flex flex-col sm:flex-row justify-between items-center gap-4 bg-emerald-900/30 border border-emerald-800 p-4 rounded-xl">
+                    <div class="flex items-center gap-4">
+                        <label class="flex items-center gap-2 cursor-pointer text-slate-300 hover:text-white transition font-medium">
+                            <input type="checkbox" id="select-all-process" class="w-5 h-5 rounded bg-slate-700 cursor-pointer" checked> 全選
+                        </label>
+                        <div class="h-6 w-px bg-slate-600"></div>
+                        <div><span class="text-emerald-400 font-bold text-lg" id="total-files-count">0</span><span class="text-slate-300"> 個音檔</span></div>
+                    </div>
+                    <button id="start-batch-btn" class="bg-emerald-600 hover:bg-emerald-500 text-white px-6 py-2.5 rounded-full font-bold shadow-lg shadow-emerald-600/30 transition flex items-center gap-2">
+                        ▶️ 開始批次 AI 解析
+                    </button>
+                </div>
+            </div>
+
+            <div class="flex-1 bg-slate-900 flex flex-col min-h-[300px] border-t border-slate-700">
+                <div class="px-6 py-4 bg-slate-800/90 backdrop-blur-sm flex justify-between items-center border-b border-slate-700 z-10 sticky top-0 flex-wrap gap-2">
+                    <h3 class="font-bold text-slate-300 tracking-wide uppercase text-sm">解析佇列</h3>
+                    <!-- 批次匯出選單 -->
+                    <div id="batch-export-controls" class="hidden relative group">
+                        <button class="flex items-center gap-2 bg-purple-600 hover:bg-purple-500 text-white px-4 py-2 rounded-lg font-semibold transition shadow-lg whitespace-nowrap">
+                            <span>📤 匯出完成項目</span>
+                        </button>
+                        <div class="absolute right-0 mt-2 w-44 bg-slate-700 rounded-xl shadow-2xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 overflow-hidden z-50 border border-slate-600">
+                            <button class="w-full text-left px-4 py-3 text-sm text-slate-200 hover:bg-slate-600 transition flex items-center gap-3" onclick="exportBatchResult('word')"><span class="text-lg">📝</span> Word (.doc)</button>
+                            <button class="w-full text-left px-4 py-3 text-sm text-slate-200 hover:bg-slate-600 transition flex items-center gap-3 border-t border-slate-600" onclick="exportBatchResult('pdf')"><span class="text-lg">📕</span> PDF (.pdf)</button>
+                            <button class="w-full text-left px-4 py-3 text-sm text-slate-200 hover:bg-slate-600 transition flex items-center gap-3 border-t border-slate-600" onclick="exportBatchResult('excel')"><span class="text-lg">📊</span> Excel (.xlsx)</button>
+                        </div>
+                    </div>
+                </div>
+                <div id="task-list" class="p-6 flex flex-col gap-3 overflow-y-auto">
+                    <div class="text-center text-slate-500 py-10 italic" id="batch-empty-state">尚未選擇資料夾...</div>
+                </div>
+            </div>
+        </div>
+
+    </main>
+
+    <div id="preview-modal" class="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur-sm opacity-0 pointer-events-none transition-opacity duration-300">
+        <div class="bg-slate-800 w-full max-w-4xl h-[90vh] rounded-2xl shadow-2xl flex flex-col border border-slate-600 transform scale-95 transition-transform duration-300" id="preview-modal-content">
+            <div class="flex justify-between items-center p-5 border-b border-slate-700 bg-slate-800 rounded-t-2xl shrink-0">
+                <h3 class="text-xl font-bold text-white flex items-center gap-2" id="preview-title">📄 內容預覽</h3>
+                <button id="close-modal-btn" class="text-slate-400 hover:text-white transition"><svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg></button>
+            </div>
+            <div class="p-6 overflow-y-auto markdown-body bg-slate-900 flex-1" id="preview-body"></div>
+            <div class="p-5 border-t border-slate-700 bg-slate-800 rounded-b-2xl flex justify-end shrink-0 flex-wrap gap-2">
+                <button id="close-modal-btn-bottom" class="bg-slate-600 hover:bg-slate-500 text-white px-6 py-2 rounded-lg font-medium transition whitespace-nowrap">關閉</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="completion-modal" class="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/70 backdrop-blur-sm opacity-0 pointer-events-none transition-all duration-300">
+        <div id="completion-modal-content" class="bg-slate-800 p-8 rounded-3xl shadow-2xl border border-emerald-500/50 flex flex-col items-center transform scale-95 transition-transform duration-300 flash-glow max-w-md w-full mx-4 text-center">
+            <div class="w-20 h-20 bg-emerald-500/20 rounded-full flex items-center justify-center mb-6">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-12 w-12 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" /></svg>
+            </div>
+            <h2 class="text-2xl font-bold text-white mb-2" id="completion-title">AI 重構完成！</h2>
+            <p class="text-slate-300 mb-8" id="completion-message">您的語音內容已成功轉換為部落格、速查表與社群貼文。</p>
+            <button id="completion-close-btn" class="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-3 px-6 rounded-xl transition-colors shadow-lg shadow-emerald-500/30">
+                立即檢視
+            </button>
+        </div>
+    </div>
+
+    <div id="toast" class="fixed bottom-6 bg-slate-700 text-white px-6 py-3 rounded-full shadow-xl transform translate-y-20 opacity-0 transition-all duration-300 font-medium z-[110]">訊息</div>
+
+    <script>
+        const apiKeyInput = document.getElementById('api-key-input');
+        const saveKeyBtn = document.getElementById('save-key-btn');
+        const toastEl = document.getElementById('toast');
+        
+        let GEMINI_API_KEY = ""; 
+
+        let toastTimeout;
+        function showToast(message) {
+            toastEl.textContent = message;
+            toastEl.classList.remove('translate-y-20', 'opacity-0');
+            toastEl.classList.add('translate-y-0', 'opacity-100');
+            clearTimeout(toastTimeout);
+            toastTimeout = setTimeout(() => {
+                toastEl.classList.remove('translate-y-0', 'opacity-100');
+                toastEl.classList.add('translate-y-20', 'opacity-0');
+            }, 3000);
+        }
+
+        let isApiKeySaved = false;
+        function setApiKeyUIState(isSaved) {
+            isApiKeySaved = isSaved;
+            if (isSaved) {
+                apiKeyInput.disabled = true;
+                apiKeyInput.classList.add('opacity-50', 'cursor-not-allowed', 'bg-slate-800');
+                apiKeyInput.classList.remove('bg-slate-900');
+                saveKeyBtn.textContent = '修改';
+                saveKeyBtn.classList.replace('bg-slate-600', 'bg-amber-600');
+                saveKeyBtn.classList.replace('hover:bg-slate-500', 'hover:bg-amber-500');
+            } else {
+                apiKeyInput.disabled = false;
+                apiKeyInput.classList.remove('opacity-50', 'cursor-not-allowed', 'bg-slate-800');
+                apiKeyInput.classList.add('bg-slate-900');
+                saveKeyBtn.textContent = '儲存';
+                saveKeyBtn.classList.replace('bg-amber-600', 'bg-slate-600');
+                saveKeyBtn.classList.replace('hover:bg-amber-500', 'hover:bg-slate-500');
+                apiKeyInput.focus();
+            }
+        }
+
+        window.addEventListener('DOMContentLoaded', () => {
+            const savedKey = localStorage.getItem('gemini_api_key');
+            if (savedKey) { 
+                apiKeyInput.value = savedKey; 
+                GEMINI_API_KEY = savedKey; 
+                setApiKeyUIState(true);
+            }
+        });
+        
+        saveKeyBtn.addEventListener('click', () => {
+            if (isApiKeySaved) {
+                setApiKeyUIState(false);
+            } else {
+                GEMINI_API_KEY = apiKeyInput.value.trim();
+                if (GEMINI_API_KEY) { 
+                    localStorage.setItem('gemini_api_key', GEMINI_API_KEY); 
+                    showToast("✅ API Key 已儲存"); 
+                    setApiKeyUIState(true);
+                } else {
+                    showToast("⚠️ 請先輸入有效的 API Key");
+                }
+            }
+        });
+
+        const tabMic = document.getElementById('tab-btn-mic');
+        const tabBatch = document.getElementById('tab-btn-batch');
+        const modeMic = document.getElementById('mode-mic');
+        const modeBatch = document.getElementById('mode-batch');
+
+        function switchTab(mode) {
+            if (mode === 'mic') {
+                modeMic.classList.remove('hidden'); modeMic.classList.add('flex');
+                modeBatch.classList.add('hidden'); modeBatch.classList.remove('flex');
+                tabMic.className = "px-6 py-3 rounded-t-xl font-bold transition-colors bg-slate-800 text-blue-400 border-t border-l border-r border-slate-700 flex items-center gap-2 whitespace-nowrap";
+                tabBatch.className = "px-6 py-3 rounded-t-xl font-bold transition-colors bg-transparent text-slate-400 hover:text-white hover:bg-slate-800/50 flex items-center gap-2 whitespace-nowrap";
+                if(!isRecording) setTimeout(resizeCanvas, 100);
+            } else {
+                modeMic.classList.add('hidden'); modeMic.classList.remove('flex');
+                modeBatch.classList.remove('hidden'); modeBatch.classList.add('flex');
+                tabBatch.className = "px-6 py-3 rounded-t-xl font-bold transition-colors bg-slate-800 text-blue-400 border-t border-l border-r border-slate-700 flex items-center gap-2 whitespace-nowrap";
+                tabMic.className = "px-6 py-3 rounded-t-xl font-bold transition-colors bg-transparent text-slate-400 hover:text-white hover:bg-slate-800/50 flex items-center gap-2 whitespace-nowrap";
+                if(isRecording) stopRecording(); 
+            }
+        }
+        tabMic.addEventListener('click', () => switchTab('mic'));
+        tabBatch.addEventListener('click', () => switchTab('batch'));
+
+        const AI_PROMPT = `請將這段語音內容進行處理。
+【嚴格規定】：處理過程必須保留完整的語意與細節，內容「不得刪減」，只能進行格式化、修正與結構化。
+
+請輸出以下四個部分，並使用 Markdown 格式排版：
+
+# 📝 一、完整內容修復 (加標點與錯字校正)
+(將原文加上正確的繁體中文標點符號、修正同音錯字，並將段落重新排版，使其方便閱讀，務必保留完整內容。)
+
+# 💻 二、部落格圖文教學文章結構
+(將上述內容改寫為適合部落格發布的文章結構，可加入適當的大小標題，並提示 [此處可插入相關圖片] 幫助讀者理解。)
+
+# ⚡ 三、精簡版快捷指令速查表 (Cheatsheet)
+(從內容中整理出最精華的重點清單、步驟或快捷指令，方便讀者一秒查閱。)
+
+# 📱 四、社群平台精華摘要 (FB/IG)
+(撰寫一段適合在社群分享的吸睛貼文，包含適當的 Emoji 與 Hashtag，吸引讀者閱讀完整內容。)`;
+
+        async function generateAIContent(parts) {
+            const keyToUse = GEMINI_API_KEY || ""; 
+            const generateUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${keyToUse}`;
+            const payload = {
+                contents: [{ parts: parts }],
+                generationConfig: { temperature: 0.2 }
+            };
+            const response = await fetch(generateUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+            if (!response.ok) { const err = await response.json(); throw new Error(err.error?.message || "生成失敗"); }
+            const data = await response.json();
+            return data.candidates[0].content.parts[0].text;
+        }
+
+        const completionModal = document.getElementById('completion-modal');
+        const completionModalContent = document.getElementById('completion-modal-content');
+        function showCompletionModal(title = "AI 重構完成！", msg = "成果已產出，請點擊下方按鈕檢視。") {
+            document.getElementById('completion-title').textContent = title;
+            document.getElementById('completion-message').textContent = msg;
+            completionModal.classList.remove('opacity-0', 'pointer-events-none');
+            setTimeout(() => {
+                completionModalContent.classList.remove('scale-95');
+                completionModalContent.classList.add('scale-100');
+            }, 10);
+        }
+        document.getElementById('completion-close-btn').addEventListener('click', () => {
+            completionModalContent.classList.remove('scale-100');
+            completionModalContent.classList.add('scale-95');
+            setTimeout(() => { completionModal.classList.add('opacity-0', 'pointer-events-none'); }, 300);
+        });
+
+        const micStartBtn = document.getElementById('mic-start-btn');
+        const micStopBtn = document.getElementById('mic-stop-btn');
+        const micClearBtn = document.getElementById('mic-clear-btn');
+        const micProcessBtn = document.getElementById('mic-ai-process-btn');
+        const micExportBtn = document.getElementById('mic-export-btn');
+        const micList = document.getElementById('mic-transcript-list');
+        const micEmptyState = document.getElementById('mic-empty-state');
+        const canvas = document.getElementById('visualizer-canvas');
+        const canvasCtx = canvas.getContext('2d');
+        const micStatusOverlay = document.getElementById('mic-status-overlay');
+        
+        let recognition = null;
+        let isRecording = false;
+        let micSentences = []; 
+        let micFinalAIResult = null; 
+        
+        let audioContext, analyser, microphoneStream, animationId;
+        let recordStartTime, timerInterval;
+
+        function initSpeechRecognition() {
+            const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+            if (!SpeechRecognition) { showToast("⚠️ 瀏覽器不支援 Web Speech API，請使用 Chrome"); return false; }
+            recognition = new SpeechRecognition();
+            recognition.continuous = true;
+            recognition.interimResults = true;
+            recognition.lang = 'zh-TW';
+
+            recognition.onresult = function(event) {
+                if (micEmptyState) micEmptyState.style.display = 'none';
+                let interimTranscript = '';
+                let finalHTML = '';
+                for (let i = 0; i < event.results.length; ++i) {
+                    if (event.results[i].isFinal) {
+                        if(i === event.results.length - 1 && event.resultIndex === i) {
+                             micSentences.push(event.results[i][0].transcript);
+                        }
+                    } else {
+                        interimTranscript += event.results[i][0].transcript;
+                    }
+                }
+                
+                micSentences.forEach(s => {
+                    finalHTML += `<div class="p-3 bg-slate-800/50 rounded-lg border border-slate-700 text-slate-200">${s}</div>`;
+                });
+                if (interimTranscript) {
+                    finalHTML += `<div class="p-3 opacity-70 flex gap-3 items-center"><div class="w-2 h-2 bg-blue-500 rounded-full animate-ping"></div><span class="text-slate-400">${interimTranscript}</span></div>`;
+                }
+                micList.innerHTML = finalHTML;
+                document.getElementById('mic-output-container').scrollTop = document.getElementById('mic-output-container').scrollHeight;
+            };
+            recognition.onerror = e => console.error("辨識錯誤:", e.error);
+            recognition.onend = () => { if (isRecording) { try { recognition.start(); } catch(e){} } }; 
+            return true;
+        }
+
+        async function startRecording() {
+            // 1. 邏輯修復：檢查是否在安全環境 (HTTPS 或 localhost)
+            // 阻擋手機端直接點開檔案 (content:// 或 file://) 的無效行為
+            if (window.location.protocol.startsWith('file') || window.location.protocol.startsWith('content') || !window.isSecureContext) {
+                showToast("🛑 安全限制：手機禁止本機檔案存取麥克風");
+                showCompletionModal("安全環境限制", "您目前直接從手機內部開啟檔案 (content://)。\n為了防止竊聽，手機瀏覽器嚴格禁止此方式使用麥克風。\n\n【解決方案】\n請將此 HTML 檔案放置於 HTTPS 網站上 (例如 Tiiny.host 或 GitHub Pages) 產生網址後開啟，才能正常啟用麥克風。");
+                return;
+            }
+
+            if (!recognition && !initSpeechRecognition()) return;
+            
+            try {
+                // 2. 邏輯修復：手機端必須「先」強制呼叫 getUserMedia 要權限
+                // 如果順序反了，iOS 與部分 Android 會直接判定失敗
+                microphoneStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+                
+                // 3. 取得權限後，才啟動語音辨識
+                recognition.start();
+                isRecording = true;
+                
+                // 啟動錄音計時與 UI 顯示
+                recordStartTime = Date.now();
+                document.getElementById('mic-active-status').classList.remove('opacity-0');
+                timerInterval = setInterval(() => {
+                    const elapsed = Date.now() - recordStartTime;
+                    const secs = Math.floor((elapsed / 1000) % 60).toString().padStart(2, '0');
+                    const mins = Math.floor((elapsed / (1000 * 60)) % 60).toString().padStart(2, '0');
+                    document.getElementById('mic-timer').textContent = `${mins}:${secs}`;
+                }, 1000);
+                
+                micStartBtn.classList.add('hidden');
+                micStopBtn.classList.remove('hidden');
+                micProcessBtn.classList.add('hidden');
+                micExportBtn.classList.add('hidden');
+                micStatusOverlay.classList.add('opacity-0', 'pointer-events-none');
+                showToast("🎙️ 錄音開始，請說話");
+
+                // 4. 設定聲波視覺化 AudioContext (必須在取得權限後才能建立)
+                audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                analyser = audioContext.createAnalyser();
+                analyser.fftSize = 256;
+                const source = audioContext.createMediaStreamSource(microphoneStream);
+                source.connect(analyser);
+                drawVisualizer();
+
+            } catch (err) { 
+                console.error("麥克風啟動失敗:", err); 
+                showToast("⚠️ 無法存取麥克風，請檢查權限設定"); 
+                // 復原按鈕狀態
+                isRecording = false;
+                if(recognition) recognition.stop();
+            }
+        }
+
+        function stopRecording() {
+            isRecording = false;
+            if (recognition) recognition.stop();
+            if (animationId) cancelAnimationFrame(animationId);
+            if (microphoneStream) microphoneStream.getTracks().forEach(t => t.stop());
+            if (audioContext && audioContext.state !== 'closed') audioContext.close();
+            
+            clearInterval(timerInterval);
+            document.getElementById('mic-active-status').classList.add('opacity-0');
+            document.getElementById('mic-timer').textContent = "00:00";
+            
+            micStartBtn.classList.remove('hidden');
+            micStopBtn.classList.add('hidden');
+            if(micSentences.length === 0) micStatusOverlay.classList.remove('opacity-0', 'pointer-events-none');
+            else micProcessBtn.classList.remove('hidden'); 
+            
+            setTimeout(resizeCanvas, 100); 
+        }
+        
+        micClearBtn.addEventListener('click', () => {
+            micSentences = []; micFinalAIResult = null;
+            micList.innerHTML = '';
+            if(micEmptyState) micEmptyState.style.display = 'block';
+            micList.appendChild(micEmptyState);
+            micProcessBtn.classList.add('hidden');
+            micExportBtn.classList.add('hidden');
+        });
+
+        function drawVisualizer() {
+            if (!isRecording || !analyser) return;
+            resizeCanvas();
+            animationId = requestAnimationFrame(drawVisualizer);
+            
+            const bufferLength = analyser.frequencyBinCount;
+            const dataArray = new Uint8Array(bufferLength);
+            
+            analyser.getByteFrequencyData(dataArray);
+            
+            canvasCtx.fillStyle = 'rgba(15, 23, 42, 0.25)';
+            canvasCtx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            const barWidth = canvas.width / bufferLength;
+            let barHeight;
+            let x = 0;
+            const centerY = canvas.height / 2;
+            
+            for (let i = 0; i < bufferLength; i++) {
+                barHeight = (dataArray[i] / 255) * centerY * 0.9;
+                
+                const r = barHeight + (50 * (i / bufferLength));
+                const g = 150 * (i / bufferLength) + 100;
+                const b = 250;
+                
+                canvasCtx.fillStyle = `rgb(${r},${g},${b})`;
+                
+                canvasCtx.fillRect(x, centerY - barHeight, barWidth * 0.8, barHeight); 
+                canvasCtx.fillRect(x, centerY, barWidth * 0.8, barHeight); 
+                
+                x += barWidth;
+            }
+        }
+
+        function resizeCanvas() {
+            const rect = canvas.parentElement.getBoundingClientRect();
+            if (canvas.width !== rect.width || canvas.height !== rect.height) {
+                canvas.width = rect.width; canvas.height = rect.height;
+                if(!isRecording) {
+                    canvasCtx.fillStyle = '#0f172a'; canvasCtx.fillRect(0, 0, canvas.width, canvas.height);
+                    canvasCtx.lineWidth = 2; canvasCtx.strokeStyle = '#334155';
+                    canvasCtx.beginPath(); canvasCtx.moveTo(0, canvas.height / 2); canvasCtx.lineTo(canvas.width, canvas.height / 2); canvasCtx.stroke();
+                }
+            }
+        }
+        window.addEventListener('resize', () => { if(!isRecording) resizeCanvas(); });
+        
+        micStartBtn.addEventListener('click', startRecording);
+        micStopBtn.addEventListener('click', stopRecording);
+
+        micProcessBtn.addEventListener('click', async () => {
+            const fullText = micSentences.join(" ");
+            if (!fullText.trim()) return showToast("⚠️ 沒有可處理的文字");
+            
+            micProcessBtn.disabled = true;
+            micProcessBtn.innerHTML = `⏳ AI 深度處理中...`;
+            try {
+                micFinalAIResult = await generateAIContent([{text: AI_PROMPT}, {text: `原始語音文字：\n${fullText}`}]);
+                showCompletionModal("語音重構完成！", "您的錄音已成功轉換為部落格、速查表與社群貼文。");
+                micProcessBtn.classList.add('hidden');
+                micExportBtn.classList.remove('hidden');
+            } catch(e) {
+                showToast("❌ 處理失敗：" + e.message);
+            } finally {
+                micProcessBtn.disabled = false;
+                micProcessBtn.innerHTML = `🧠 執行 AI 深度重構`;
+            }
+        });
+
+        const folderInput = document.getElementById('folder-input');
+        const batchSummary = document.getElementById('batch-summary');
+        const taskList = document.getElementById('task-list');
+        const batchEmptyState = document.getElementById('batch-empty-state');
+        const startBatchBtn = document.getElementById('start-batch-btn');
+        const selectAllProcess = document.getElementById('select-all-process');
+        const batchExportControls = document.getElementById('batch-export-controls');
+        
+        let batchAudioFiles = [];
+        let batchProcessedResults = {}; 
+
+        folderInput.addEventListener('change', (e) => {
+            const files = Array.from(e.target.files);
+            batchAudioFiles = files.filter(f => f.name.toLowerCase().match(/\.(mp3|wav|m4a)$/));
+            if (batchAudioFiles.length === 0) { showToast("⚠️ 沒有找到支援的音檔"); return; }
+            
+            document.getElementById('total-files-count').textContent = batchAudioFiles.length;
+            batchSummary.classList.remove('hidden');
+            batchEmptyState.style.display = 'none';
+            taskList.innerHTML = '';
+            batchProcessedResults = {};
+            batchExportControls.classList.add('hidden');
+            if (selectAllProcess) selectAllProcess.checked = true;
+
+            batchAudioFiles.forEach((file, i) => {
+                const id = `batch-task-${i}`;
+                const sizeMB = (file.size / (1024*1024)).toFixed(2);
+                const html = `
+                    <div id="${id}" class="bg-slate-800/80 border border-slate-700 rounded-xl p-4 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                        <div class="flex items-center gap-3 w-full sm:w-auto">
+                            <input type="checkbox" id="${id}-chk" value="${file.name}" class="batch-file-chk w-5 h-5 rounded bg-slate-900 cursor-pointer" checked>
+                            <div class="w-10 h-10 rounded-lg bg-slate-700 flex items-center justify-center shrink-0">🎵</div>
+                            <div class="flex-1 min-w-0">
+                                <h4 class="font-bold text-white truncate" title="${file.name}">${file.name}</h4>
+                                <div class="text-xs text-slate-400 mt-1 flex gap-3"><span>${sizeMB} MB</span><span id="${id}-status">等待處理...</span></div>
+                            </div>
+                        </div>
+                        <div class="flex items-center gap-2 justify-end w-full sm:w-auto mt-2 sm:mt-0">
+                            <div id="${id}-spinner" class="hidden"><svg class="animate-spin h-5 w-5 text-blue-500" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg></div>
+                            <button id="${id}-preview-btn" class="hidden bg-slate-700 hover:bg-slate-600 text-white px-3 py-1.5 rounded-lg text-sm font-medium transition" onclick="openPreviewModal('${file.name.replace(/'/g, "\\'")}', batchProcessedResults['${file.name.replace(/'/g, "\\'")}'])">👁️ 預覽</button>
+                        </div>
+                    </div>`;
+                taskList.insertAdjacentHTML('beforeend', html);
+            });
+            showToast(`📁 載入 ${batchAudioFiles.length} 個音檔`);
+            folderInput.value = '';
+        });
+
+        if (selectAllProcess) {
+            selectAllProcess.addEventListener('change', e => {
+                document.querySelectorAll('.batch-file-chk').forEach(cb => cb.checked = e.target.checked);
+            });
+        }
+
+        async function uploadBinaryToGemini(file) {
+            const keyToUse = GEMINI_API_KEY || "";
+            const url = `https://generativelanguage.googleapis.com/upload/v1beta/files?key=${keyToUse}`;
+            const mimeType = file.type || (file.name.toLowerCase().endsWith('.mp3') ? 'audio/mp3' : 'audio/wav');
+            const res = await fetch(url, {
+                method: 'POST',
+                headers: { 'X-Goog-Upload-Protocol': 'raw', 'X-Goog-Upload-Command': 'upload', 'X-Goog-Upload-Header-Content-Length': file.size.toString(), 'X-Goog-Upload-Header-Content-Type': mimeType, 'Content-Type': mimeType },
+                body: file
+            });
+            if (!res.ok) throw new Error("上傳失敗");
+            const data = await res.json();
+            return { uri: data.file.uri, mimeType: mimeType };
+        }
+
+        startBatchBtn.addEventListener('click', async () => {
+            if (batchAudioFiles.length === 0) return;
+            startBatchBtn.disabled = true; startBatchBtn.innerHTML = "⏳ 批次處理中...";
+            let count = 0;
+
+            for (let i = 0; i < batchAudioFiles.length; i++) {
+                const file = batchAudioFiles[i];
+                const id = `batch-task-${i}`;
+                const chk = document.getElementById(`${id}-chk`);
+                const status = document.getElementById(`${id}-status`);
+                const spinner = document.getElementById(`${id}-spinner`);
+                
+                if (!chk.checked) { status.textContent = "已跳過"; status.className = "text-slate-500 text-xs"; continue; }
+                count++;
+                try {
+                    spinner.classList.remove('hidden'); status.textContent = "上傳中..."; status.className = "text-blue-400 text-xs font-bold";
+                    const fileUri = await uploadBinaryToGemini(file);
+                    
+                    status.textContent = "AI 重構中..."; status.className = "text-amber-400 text-xs font-bold";
+                    const parts = [{text: AI_PROMPT}, {fileData: {mimeType: fileUri.mimeType, fileUri: fileUri.uri}}];
+                    const result = await generateAIContent(parts);
+                    
+                    batchProcessedResults[file.name] = result;
+                    status.textContent = "完成"; status.className = "text-emerald-400 text-xs font-bold";
+                    spinner.innerHTML = `<svg class="h-5 w-5 text-emerald-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" /></svg>`;
+                    document.getElementById(`${id}-preview-btn`).classList.remove('hidden');
+                } catch(e) {
+                    status.textContent = "失敗: " + e.message; status.className = "text-red-400 text-xs font-bold";
+                    spinner.innerHTML = `<svg class="h-5 w-5 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>`;
+                }
+            }
+
+            startBatchBtn.disabled = false; startBatchBtn.innerHTML = "▶️ 開始批次 AI 解析";
+            if (count > 0 && Object.keys(batchProcessedResults).length > 0) {
+                batchExportControls.classList.remove('hidden');
+                showCompletionModal("批次處理完成！", `共完成了 ${Object.keys(batchProcessedResults).length} 個檔案的解析與企劃重構。`);
+            }
+        });
+
+        const previewModal = document.getElementById('preview-modal');
+        const previewModalContent = document.getElementById('preview-modal-content');
+        const previewTitle = document.getElementById('preview-title');
+        const previewBody = document.getElementById('preview-body');
+        
+        function openPreviewModal(title, markdownText) {
+            previewTitle.innerHTML = `📄 預覽：${title}`;
+            previewBody.innerHTML = marked.parse(markdownText);
+            previewModal.classList.remove('opacity-0', 'pointer-events-none');
+            setTimeout(() => { previewModalContent.classList.remove('scale-95'); previewModalContent.classList.add('scale-100'); }, 10);
+        }
+        function closePreviewModal() {
+            previewModalContent.classList.remove('scale-100'); previewModalContent.classList.add('scale-95');
+            setTimeout(() => { previewModal.classList.add('opacity-0', 'pointer-events-none'); }, 300);
+        }
+        document.getElementById('close-modal-btn').addEventListener('click', closePreviewModal);
+        document.getElementById('close-modal-btn-bottom').addEventListener('click', closePreviewModal);
+
+        function getBatchSelectedData() {
+            const data = [];
+            document.querySelectorAll('.batch-file-chk:checked').forEach(cb => {
+                if(batchProcessedResults[cb.value]) data.push({ title: cb.value, content: batchProcessedResults[cb.value] });
+            });
+            return data;
+        }
+
+        function exportBatchResult(type) {
+            const data = getBatchSelectedData();
+            if(data.length === 0) return showToast("⚠️ 沒有可匯出的已完成項目");
+            executeExport(data, `批次解析_${Date.now()}`, type);
+        }
+        
+        function executeExport(dataArray, defaultFilename, type) {
+            showToast(`⏳ 產生 ${type.toUpperCase()} 中...`);
+            if (type === 'excel') {
+                const ws_data = [["來源", "AI 企劃與解析內容 (Markdown)"]];
+                dataArray.forEach(d => ws_data.push([d.title, d.content]));
+                const ws = XLSX.utils.aoa_to_sheet(ws_data);
+                ws['!cols'] = [{wch: 30}, {wch: 120}];
+                const wb = XLSX.utils.book_new();
+                XLSX.utils.book_append_sheet(wb, ws, "解析結果");
+                XLSX.writeFile(wb, `${defaultFilename}.xlsx`);
+                showToast("✅ Excel 匯出成功");
+            } else if (type === 'word') {
+                let html = `<html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'><head><meta charset='utf-8'><title>AI語音解析</title></head><body style="font-family: sans-serif; line-height: 1.6;">`;
+                dataArray.forEach((d, i) => {
+                    html += `<h2 style="color:#2563eb; border-bottom: 2px solid #2563eb; padding-bottom: 10px;">📄 來源：${d.title}</h2>${marked.parse(d.content)}`;
+                    if (i < dataArray.length - 1) html += `<br clear=all style='mso-special-character:line-break;page-break-before:always'>`;
+                });
+                html += `</body></html>`;
+                const a = document.createElement("a");
+                a.href = 'data:application/vnd.ms-word;charset=utf-8,' + encodeURIComponent(html);
+                a.download = `${defaultFilename}.doc`;
+                document.body.appendChild(a); a.click(); document.body.removeChild(a);
+                showToast("✅ Word 匯出成功");
+            } else if (type === 'pdf') {
+                const element = document.createElement('div');
+                element.style.padding = '20px'; element.style.fontFamily = "'Noto Sans TC', sans-serif"; element.style.backgroundColor = "#fff"; element.style.color = "#000";
+                dataArray.forEach((d, i) => {
+                    let sec = document.createElement('div');
+                    sec.innerHTML = `<h2 style="color:#2563eb; border-bottom: 2px solid #2563eb; padding-bottom: 10px; margin-bottom:20px;">📄 來源：${d.title}</h2>${marked.parse(d.content)}`;
+                    if (i < dataArray.length - 1) sec.style.pageBreakAfter = 'always';
+                    element.appendChild(sec);
+                });
+                html2pdf().set({ margin: 15, filename: `${defaultFilename}.pdf`, image: { type: 'jpeg', quality: 0.98 }, html2canvas: { scale: 2 }, jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' } }).from(element).save().then(()=>showToast("✅ PDF 匯出成功"));
+            }
+        }
+        
+        function exportMicResult() {
+            if(!micFinalAIResult) return;
+            executeExport([{title: "即時錄音", content: micFinalAIResult}], `即時語音重構_${Date.now()}`, 'word');
+        }
+
+        switchTab('mic');
+
+    </script>
+</body>
+</html>
